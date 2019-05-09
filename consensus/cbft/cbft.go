@@ -111,6 +111,7 @@ type Cbft struct {
 	blockChainCache         *core.BlockChainCache
 	hasBlockCh              chan *HasBlock
 	getBlockByHashCh        chan *GetBlock
+	fastSyncCommitHeadCh    chan chan error
 	needPending             bool
 	RoundState
 	Syncing
@@ -161,6 +162,7 @@ func New(config *params.CbftConfig, eventMux *event.TypeMux) *Cbft {
 		viewChangeVoteTimeoutCh: make(chan *viewChangeVote),
 		hasBlockCh:              make(chan *HasBlock, peerMsgQueueSize),
 		getBlockByHashCh:        make(chan *GetBlock),
+		fastSyncCommitHeadCh:    make(chan chan error),
 		netLatencyMap:           make(map[discover.NodeID]*list.List),
 		log:                     log.New(),
 	}
@@ -314,6 +316,8 @@ func (cbft *Cbft) receiveLoop() {
 			cbft.OnHasBlock(hasBlock)
 		case block := <-cbft.getBlockByHashCh:
 			cbft.OnGetBlockByHash(block.hash, block.ch)
+		case fastSync := <-cbft.fastSyncCommitHeadCh:
+			cbft.OnFastSyncCommitHead(fastSync)
 		}
 	}
 }
@@ -1818,6 +1822,44 @@ func (cbft *Cbft) GetBlockByHash(hash common.Hash) *types.Block {
 
 func (cbft *Cbft) CurrentBlock() *types.Block {
 	return cbft.getHighestConfirmed().block
+}
+
+func (cbft *Cbft) FastSyncCommitHead() <-chan error {
+	errCh := make(chan error, 1)
+	cbft.fastSyncCommitHeadCh <- errCh
+	return errCh
+}
+
+func (cbft *Cbft) OnFastSyncCommitHead(errCh chan error) {
+	currentBlock := cbft.blockChain.CurrentBlock()
+	cbft.log.Debug("Fast sync commit highestLogicalBlock", "hash", currentBlock.Hash(), "number", currentBlock.NumberU64())
+	current := NewBlockExtBySeal(currentBlock, currentBlock.NumberU64(), cbft.getThreshold())
+	current.number = currentBlock.NumberU64()
+
+	if current.number > 0 && len(cbft.dpos.primaryNodeList) > 1 {
+		var extra *BlockExtra
+		var err error
+
+		if _, extra, err = cbft.decodeExtra(current.block.ExtraData()); err != nil {
+			errCh <- err
+			return
+		}
+		current.view = extra.ViewChange
+
+		for _, vote := range extra.Prepare {
+			current.timestamp = vote.Timestamp
+			current.prepareVotes.Add(vote)
+		}
+	}
+
+	cbft.blockExtMap = NewBlockExtMap(current, cbft.getThreshold())
+	cbft.saveBlockExt(currentBlock.Hash(), current)
+
+	cbft.highestConfirmed.Store(current)
+	cbft.highestLogical.Store(current)
+	cbft.rootIrreversible.Store(current)
+
+	errCh <- nil
 }
 
 func (cbft *Cbft) needBroadcast(nodeId discover.NodeID, msg Message) bool {
