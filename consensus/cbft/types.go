@@ -22,7 +22,9 @@ var (
 	errTimestamp                  = errors.New("viewchange timestamp too low")
 	errInvalidViewChangeVote      = errors.New("invalid viewchange vote")
 
-	emptyAddr common.Address
+
+	emptyAddr  common.Address
+
 )
 
 type AcceptStatus int
@@ -31,6 +33,7 @@ const (
 	Accept = iota
 	Discard
 	Cache
+
 )
 
 type blockSynced struct {
@@ -310,7 +313,7 @@ func (cbft *Cbft) AcceptPrepareBlock(request *prepareBlock) AcceptStatus {
 }
 
 func (cbft *Cbft) AcceptPrepareVote(vote *prepareVote) AcceptStatus {
-	if vote.Number < cbft.getHighestConfirmed().number {
+	if vote.Number < cbft.getHighestConfirmed().number  {
 		return Discard
 	}
 	if (cbft.lastViewChange != nil && vote.Number < cbft.lastViewChange.BaseBlockNum) ||
@@ -531,7 +534,7 @@ func (cbft *Cbft) OnViewChangeVote(peerID discover.NodeID, vote *viewChangeVote)
 		cbft.flushReadyBlock()
 		cbft.producerBlocks = NewProducerBlocks(cbft.config.NodeID, cbft.viewChange.BaseBlockNum)
 		cbft.clearPending()
-		cbft.blockExtMap.ClearChildren(cbft.viewChange.BaseBlockHash, cbft.viewChange.BaseBlockNum, cbft.viewChange.Timestamp)
+		cbft.blockExtMap.ClearChildren(cbft.viewChange.BaseBlockHash, cbft.viewChange.BaseBlockNum)
 
 	}
 	log.Info("Receive viewchange vote", "msg", vote.String(), "had votes", len(cbft.viewChangeVotes))
@@ -1026,18 +1029,15 @@ func (bm *BlockExtMap) ClearParents(hash common.Hash, number uint64) {
 	//}
 }
 
-func (bm *BlockExtMap) ClearChildren(hash common.Hash, number uint64, timestamp uint64) {
+func (bm *BlockExtMap) ClearChildren(hash common.Hash, number uint64) {
 	for i := number + 1; bm.blocks[i] != nil; i++ {
 		log.Debug("clear block", "number", i)
 		for hash, ext := range bm.blocks[i] {
 			if ext.parent != nil {
 				delete(ext.parent.children, hash)
 			}
-			if ext.timestamp != timestamp {
-				ext.SetSyncState(nil)
-				delete(bm.blocks[i], hash)
-			}
 		}
+		delete(bm.blocks, i)
 	}
 }
 
