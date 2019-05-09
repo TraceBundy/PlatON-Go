@@ -524,11 +524,14 @@ func (cbft *Cbft) OnGetHighestPrepareBlock(peerID discover.NodeID, msg *getHighe
 	unconfirmedBlock := make([]*prepareBlock, 0)
 	votes := make([]*prepareVotes, 0)
 	cbft.log.Debug("Receive GetHighestPrepareBlock", "peer", peerID.TerminalString(), "msg", msg.String())
+	if commit > msg.Lowest && commit-msg.Lowest > maxBlockDist {
+		log.Debug("Discard GetHighestPrepareBlock msg, too far away", "peer", peerID.TerminalString(), "lowest", msg.Lowest, "root", commit)
+		return errors.New("peer's block too far away")
+	}
 	for i := msg.Lowest; i <= commit; i++ {
 		if b := cbft.blockChain.GetBlockByNumber(i); b != nil {
 			commitedBlock = append(commitedBlock, b)
 		}
-
 	}
 
 	exts := cbft.blockExtMap.findBlockExtByNumber(commit+1, highest)
@@ -549,6 +552,12 @@ func (cbft *Cbft) OnGetHighestPrepareBlock(peerID discover.NodeID, msg *getHighe
 
 func (cbft *Cbft) OnHighestPrepareBlock(peerID discover.NodeID, msg *highestPrepareBlock) error {
 	cbft.log.Debug("Receive HighestPrepareBlock", "peer", peerID.TerminalString(), "msg", msg.String())
+	if len(msg.CommitedBlock) > int(maxBlockDist) {
+		cbft.log.Debug("Discard HighestPrepareBlock msg, exceeded allowance", "peer", peerID.TerminalString(), "CommitedBlock", len(msg.CommitedBlock), "limited", maxBlockDist)
+		atomic.StoreInt32(&cbft.running, 0)
+		return errors.New("exceeded allowance")
+	}
+
 	for _, block := range msg.CommitedBlock {
 		cbft.log.Debug("Sync Highest Block", "number", block.NumberU64())
 		cbft.InsertChain(block, nil)
