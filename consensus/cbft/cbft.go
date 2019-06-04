@@ -1231,7 +1231,7 @@ func (cbft *Cbft) OnExecutedBlock(bs *ExecuteBlockStatus) {
 			if bs.block.isConfirmed {
 				if highest != nil &&  highest.number > cbft.getHighestConfirmed().number {
 					cbft.highestConfirmed.Store(highest)
-					cbft.bp.InternalBP().NewHighestConfirmedBlock(context.TODO(), highest, &cbft.RoundState)
+					cbft.bp.InternalBP().NewHighestConfirmedBlock(context.TODO(), highest, cbft)
 				}
 				cbft.log.Debug("Send Confirmed Block", "hash", bs.block.block.Hash(), "number", bs.block.block.NumberU64())
 				cbft.handler.SendAllConsensusPeer(&confirmedPrepareBlock{Hash: bs.block.block.Hash(), Number: bs.block.block.NumberU64(), VoteBits: bs.block.prepareVotes.voteBits})
