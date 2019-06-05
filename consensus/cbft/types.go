@@ -454,7 +454,7 @@ func (cbft *Cbft) newViewChange() (*viewChange, error) {
 
 	ext := cbft.getHighestConfirmed()
 
-	if ext.number != cbft.localHighestPrepareVoteNum {
+	if ext.number < cbft.localHighestPrepareVoteNum {
 		//todo ask prepare vote to other, need optimize
 		cbft.handler.SendAllConsensusPeer(&getHighestPrepareBlock{Lowest: cbft.localHighestPrepareVoteNum})
 
