@@ -341,7 +341,7 @@ func (cbft *Cbft) scheduleHighestPrepareBlock() {
 	schedule := time.NewTicker(5 * time.Second)
 	for {
 		select {
-		case <- schedule.C:
+		case <-schedule.C:
 			cbft.handler.SendPartBroadcast(&getHighestPrepareBlock{Lowest: cbft.getRootIrreversible().number + 1})
 		}
 	}
@@ -1092,7 +1092,7 @@ func (cbft *Cbft) OnNewPrepareBlock(nodeId discover.NodeID, request *prepareBloc
 		//receive 2f+1 view vote , clear last view state
 		if cbft.agreeViewChange() {
 			viewChangeConfirmedTimer.UpdateSince(time.Unix(int64(cbft.viewChange.Timestamp), 0))
-			cbft.bp.ViewChangeBP().TwoThirdViewChangeVotes(bpCtx, cbft)
+			cbft.bp.ViewChangeBP().TwoThirdViewChangeVotes(bpCtx, cbft.viewChange, cbft.viewChangeVotes, cbft)
 			var newHeader *types.Header
 			viewBlock := cbft.blockExtMap.findBlock(cbft.viewChange.BaseBlockHash, cbft.viewChange.BaseBlockNum)
 
@@ -1241,7 +1241,7 @@ func (cbft *Cbft) OnExecutedBlock(bs *ExecuteBlockStatus) {
 
 			highest := cbft.blockExtMap.FindHighestConfirmed(cbft.getHighestConfirmed().block.Hash(), cbft.getHighestConfirmed().block.NumberU64())
 			if bs.block.isConfirmed {
-				if highest != nil &&  highest.number > cbft.getHighestConfirmed().number {
+				if highest != nil && highest.number > cbft.getHighestConfirmed().number {
 					cbft.highestConfirmed.Store(highest)
 					cbft.bp.InternalBP().NewHighestConfirmedBlock(context.TODO(), highest, cbft)
 				}
