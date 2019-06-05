@@ -30,22 +30,23 @@ type PrepareBP interface {
 	CacheVote(ctx context.Context, block *prepareVote, cbft *Cbft)
 	DiscardVote(ctx context.Context, block *prepareVote, cbft *Cbft)
 
-	SendPrepareVote(ctx context.Context, ext *BlockExt, cbft *Cbft)
+	SendPrepareVote(ctx context.Context, ext *prepareVote, cbft *Cbft)
 	InvalidBlock(ctx context.Context, block *prepareBlock, err error, cbft *Cbft)
 	InvalidVote(ctx context.Context, block *prepareVote, err error, cbft *Cbft)
 	InvalidViewChangeVote(ctx context.Context, block *prepareBlock, err error, cbft *Cbft)
-	TwoThirdVotes(ctx context.Context, ext *BlockExt, cbft *Cbft)
+	TwoThirdVotes(ctx context.Context, ext *prepareVote, cbft *Cbft)
 }
 
 type ViewChangeBP interface {
+	SendViewChange(ctx context.Context, view *viewChange, cbft *Cbft)
 	ReceiveViewChange(ctx context.Context, view *viewChange, cbft *Cbft)
 	ReceiveViewChangeVote(ctx context.Context, view *viewChangeVote, cbft *Cbft)
 	InvalidViewChange(ctx context.Context, view *viewChange, err error, cbft *Cbft)
 	InvalidViewChangeVote(ctx context.Context, view *viewChangeVote, err error, cbft *Cbft)
 	InvalidViewChangeBlock(ctx context.Context, view *viewChange, cbft *Cbft)
-	TwoThirdViewChangeVotes(ctx context.Context, cbft *Cbft)
+	TwoThirdViewChangeVotes(ctx context.Context, view *viewChange, votes ViewChangeVotes,  cbft *Cbft)
 	SendViewChangeVote(ctx context.Context, view *viewChangeVote, cbft *Cbft)
-	ViewChangeTimeout(ctx context.Context, cbft *Cbft)
+	ViewChangeTimeout(ctx context.Context, view *viewChange, cbft *Cbft)
 }
 
 type SyncBlockBP interface {
@@ -54,8 +55,8 @@ type SyncBlockBP interface {
 }
 
 type InternalBP interface {
-	ExecuteBlock(ctx context.Context, hash common.Hash, number uint64, elapse time.Duration)
-	InvalidBlock(ctx context.Context, hash common.Hash, number uint64, err error)
+	ExecuteBlock(ctx context.Context, hash common.Hash, number uint64, timestamp uint64, elapse time.Duration)
+	InvalidBlock(ctx context.Context, hash common.Hash, number uint64, timestamp uint64, err error)
 	ForkedResetTxPool(ctx context.Context, newHeader *types.Header, injectBlock types.Blocks, elapse time.Duration, cbft *Cbft)
 	ResetTxPool(ctx context.Context, ext *BlockExt, elapse time.Duration, cbft *Cbft)
 	NewConfirmedBlock(ctx context.Context, ext *BlockExt, cbft *Cbft)
@@ -65,7 +66,7 @@ type InternalBP interface {
 	NewHighestLogicalBlock(ctx context.Context, ext *BlockExt, cbft *Cbft)
 	NewHighestRootBlock(ctx context.Context, ext *BlockExt, cbft *Cbft)
 
-	SwitchView(ctx context.Context, view *viewChange)
+	SwitchView(ctx context.Context, view *viewChange, cbft *Cbft)
 	Seal(ctx context.Context, ext *BlockExt, cbft *Cbft)
 }
 
@@ -74,6 +75,18 @@ type defaultBreakpoint struct {
 	viewChangeBP ViewChangeBP
 	syncBlockBP  SyncBlockBP
 	internalBP   InternalBP
+}
+
+func getBreakpoint(t string) Breakpoint {
+	switch t {
+	case "tracing":
+		return logBP
+	case "default":
+		return defaultBP
+	case "elk":
+		return elkBP
+	}
+	return defaultBP
 }
 
 var defaultBP Breakpoint
@@ -137,7 +150,7 @@ func (bp defaultPrepareBP) DiscardVote(ctx context.Context, block *prepareVote, 
 
 }
 
-func (bp defaultPrepareBP) SendPrepareVote(ctx context.Context, ext *BlockExt, cbft *Cbft) {
+func (bp defaultPrepareBP) SendPrepareVote(ctx context.Context, ext *prepareVote, cbft *Cbft) {
 
 }
 
@@ -153,11 +166,15 @@ func (bp defaultPrepareBP) InvalidViewChangeVote(ctx context.Context, block *pre
 
 }
 
-func (bp defaultPrepareBP) TwoThirdVotes(ctx context.Context, ext *BlockExt, cbft *Cbft) {
+func (bp defaultPrepareBP) TwoThirdVotes(ctx context.Context, ext *prepareVote, cbft *Cbft) {
 
 }
 
 type defaultViewChangeBP struct {
+}
+
+func (bp defaultViewChangeBP) SendViewChange(ctx context.Context, view *viewChange, cbft *Cbft) {
+
 }
 
 func (bp defaultViewChangeBP) ReceiveViewChange(ctx context.Context, view *viewChange, cbft *Cbft) {
@@ -180,7 +197,7 @@ func (bp defaultViewChangeBP) InvalidViewChangeBlock(ctx context.Context, view *
 
 }
 
-func (bp defaultViewChangeBP) TwoThirdViewChangeVotes(ctx context.Context, cbft *Cbft) {
+func (bp defaultViewChangeBP) TwoThirdViewChangeVotes(ctx context.Context, view *viewChange, votes ViewChangeVotes, cbft *Cbft) {
 
 }
 
@@ -188,7 +205,7 @@ func (bp defaultViewChangeBP) SendViewChangeVote(ctx context.Context, view *view
 
 }
 
-func (bp defaultViewChangeBP) ViewChangeTimeout(ctx context.Context, cbft *Cbft) {
+func (bp defaultViewChangeBP) ViewChangeTimeout(ctx context.Context, view *viewChange, cbft *Cbft) {
 
 }
 
@@ -206,10 +223,10 @@ func (bp defaultSyncBlockBP) InvalidBlock(ctx context.Context, ext *BlockExt, er
 type defaultInternalBP struct {
 }
 
-func (bp defaultInternalBP) InvalidBlock(ctx context.Context, hash common.Hash, number uint64, err error) {
+func (bp defaultInternalBP) InvalidBlock(ctx context.Context, hash common.Hash, number uint64, timestamp uint64, err error) {
 
 }
-func (bp defaultInternalBP) ExecuteBlock(ctx context.Context, hash common.Hash, number uint64, elapse time.Duration) {
+func (bp defaultInternalBP) ExecuteBlock(ctx context.Context, hash common.Hash, number uint64, timestamp uint64, elapse time.Duration) {
 
 }
 
@@ -245,7 +262,7 @@ func (bp defaultInternalBP) NewHighestRootBlock(ctx context.Context, ext *BlockE
 
 }
 
-func (bp defaultInternalBP) SwitchView(ctx context.Context, view *viewChange) {
+func (bp defaultInternalBP) SwitchView(ctx context.Context, view *viewChange, cbft *Cbft) {
 
 }
 

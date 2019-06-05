@@ -2,6 +2,7 @@ package cbft
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	sort2 "sort"
 	"time"
@@ -73,6 +74,47 @@ func (vv ViewChangeVotes) String() string {
 	}
 	s += "]"
 	return s
+}
+
+func (vv ViewChangeVotes) MarshalJSON() ([]byte, error) {
+	type Vote struct {
+		Address common.Address  `json:"address"`
+		Vote    *viewChangeVote `json:"vote"`
+	}
+	type Votes struct {
+		Votes []*Vote `json:"votes"`
+	}
+
+	votes := &Votes{
+		Votes: make([]*Vote, 0),
+	}
+	for k, v := range vv {
+		votes.Votes = append(votes.Votes, &Vote{
+			Address: k,
+			Vote:    v,
+		})
+	}
+	return json.Marshal(votes)
+}
+
+func (vv ViewChangeVotes) UnmarshalJSON(b []byte) error {
+	type Vote struct {
+		Address common.Address  `json:"address"`
+		Vote    *viewChangeVote `json:"vote"`
+	}
+	type Votes struct {
+		Votes []*Vote `json:"votes"`
+	}
+	var votes Votes
+	err := json.Unmarshal(b, &votes)
+	if err != nil {
+		return err
+	}
+
+	for _, vote := range votes.Votes {
+		vv[vote.Address] = vote.Vote
+	}
+	return nil
 }
 
 func (rs RoundState) String() string {
@@ -555,6 +597,7 @@ func (cbft *Cbft) afterUpdateValidator() {
 func (cbft *Cbft) OnViewChangeVote(peerID discover.NodeID, vote *viewChangeVote) error {
 	log.Debug("Receive view change vote", "peer", peerID, "vote", vote.String(), "view", cbft.viewChange.String())
 	bpCtx := context.WithValue(context.Background(), "peer", peerID)
+	cbft.bp.ViewChangeBP().ReceiveViewChangeVote(bpCtx, vote, cbft)
 	if cbft.needBroadcast(peerID, vote) {
 		go cbft.handler.SendBroadcast(vote)
 	}
@@ -603,7 +646,7 @@ func (cbft *Cbft) OnViewChangeVote(peerID discover.NodeID, vote *viewChangeVote)
 			Hash:   vote.BlockHash,
 			Number: vote.BlockNum,
 		})
-		cbft.bp.ViewChangeBP().TwoThirdViewChangeVotes(bpCtx, cbft)
+		cbft.bp.ViewChangeBP().TwoThirdViewChangeVotes(bpCtx, cbft.viewChange, cbft.viewChangeVotes, cbft)
 		cbft.flushReadyBlock()
 		cbft.producerBlocks = NewProducerBlocks(cbft.config.NodeID, cbft.viewChange.BaseBlockNum)
 		cbft.clearPending()
@@ -745,6 +788,39 @@ type BlockExt struct {
 	parent          *BlockExt
 	children        map[common.Hash]*BlockExt
 	syncState       chan error
+}
+
+func (b BlockExt) MarshalJSON() ([]byte, error) {
+	type BlockExt struct {
+		Timestamp       uint64      `json:"timestamp"`
+		InTree          bool        `json:"in_tree"`
+		InTurn          bool        `json:"in_turn"`
+		Executing       bool        `json:"executing"`
+		IsExecuted      bool        `json:"is_executed"`
+		IsSigned        bool        `json:"is_signed"`
+		IsConfirmed     bool        `json:"is_confirmed"`
+		Number          uint64      `json:"block_number"`
+		RcvTime         int64       `json:"receive_time"`
+		Hash            common.Hash `json:"block_hash"`
+		Parent          common.Hash `json:"parent_hash"`
+		ViewChangeVotes int         `json:"viewchange_votes"`
+		PrepareVotes    int         `json:"prepare_votes"`
+	}
+	ext := BlockExt{
+		Timestamp:       b.timestamp,
+		InTree:          b.inTree,
+		InTurn:          b.inTurn,
+		Executing:       b.executing,
+		IsExecuted:      b.isExecuted,
+		IsSigned:        b.isSigned,
+		IsConfirmed:     b.isConfirmed,
+		Number:          b.number,
+		RcvTime:         b.rcvTime,
+		ViewChangeVotes: len(b.viewChangeVotes),
+		PrepareVotes:    b.prepareVotes.Len(),
+	}
+
+	return json.Marshal(&ext)
 }
 
 func (b BlockExt) String() string {
