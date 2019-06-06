@@ -498,7 +498,7 @@ func (cbft *Cbft) newViewChange() (*viewChange, error) {
 
 	if ext.number < cbft.localHighestPrepareVoteNum {
 		//todo ask prepare vote to other, need optimize
-		cbft.handler.SendAllConsensusPeer(&getHighestPrepareBlock{Lowest: cbft.localHighestPrepareVoteNum})
+		cbft.handler.SendAllConsensusPeer(&getHighestPrepareBlock{Lowest: ext.number})
 
 		return nil, errInvalidConfirmNumTooLow
 	}
