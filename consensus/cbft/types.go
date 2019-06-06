@@ -589,9 +589,7 @@ func (cbft *Cbft) setViewChange(view *viewChange) {
 }
 
 func (cbft *Cbft) afterUpdateValidator() {
-	if _, err := cbft.getValidators().NodeIndex(cbft.config.NodeID); err != nil {
-		cbft.master = false
-	}
+	cbft.master = false
 }
 
 func (cbft *Cbft) OnViewChangeVote(peerID discover.NodeID, vote *viewChangeVote) error {
