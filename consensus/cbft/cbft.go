@@ -464,12 +464,26 @@ func (cbft *Cbft) OnShouldSeal(shouldSeal chan error) {
 		}
 	}
 END:
-	if cbft.hadSendViewChange() && cbft.validViewChange() {
+	if cbft.hadSendViewChange() {
 		validator, err := cbft.getValidators().NodeIndexAddress(cbft.config.NodeID)
 
 		if err != nil {
 			log.Debug("Get node index and address failed", "error", err)
 			shouldSeal <- err
+			return
+		}
+
+		// May be currently only me produce block, so current view
+		// should be invalid, making a new one.
+		if !cbft.validViewChange() {
+			// need send viewchange
+			cbft.OnSendViewChange()
+
+			oldCount := viewChangeGauage.Value()
+			viewChangeGauage.Update(oldCount + 1)
+			viewChangeCounter.Inc(1)
+
+			shouldSeal <- errTwoThirdViewchangeVotes
 			return
 		}
 
@@ -481,7 +495,7 @@ END:
 		} else {
 			shouldSeal <- errInitiateViewchange
 		}
-	} else if cbft.validViewChange() {
+	} else {
 		// need send viewchange
 		cbft.OnSendViewChange()
 
