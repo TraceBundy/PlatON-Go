@@ -317,6 +317,9 @@ func (cbft *Cbft) hadSendViewChange() bool {
 }
 
 func (cbft *Cbft) validViewChange() bool {
+	if cbft.viewChange == nil {
+		return true
+	}
 	//check current timestamp match view's timestamp
 	maxViewProducerBlocksLimit := uint64(cbft.config.Duration) / cbft.config.Period
 	now := time.Now().Unix()
