@@ -481,7 +481,7 @@ END:
 		} else {
 			shouldSeal <- errInitiateViewchange
 		}
-	} else {
+	} else if cbft.validViewChange() {
 		// need send viewchange
 		cbft.OnSendViewChange()
 
@@ -816,12 +816,11 @@ func (cbft *Cbft) OnSeal(sealedBlock *types.Block, sealResultCh chan<- *types.Bl
 	//log this signed block's number
 	cbft.signedSet[sealedBlock.NumberU64()] = struct{}{}
 
-	cbft.log.Debug("Seal complete", "hash", sealedBlock.Hash(), "number", sealedBlock.NumberU64())
-
 	cbft.bp.InternalBP().Seal(context.TODO(), current, cbft)
 	cbft.bp.InternalBP().NewHighestLogicalBlock(context.TODO(), current, cbft)
 	cbft.SetLocalHighestPrepareNum(current.number)
 	if cbft.getValidators().Len() == 1 {
+		cbft.log.Debug("Seal complete", "hash", sealedBlock.Hash(), "number", sealedBlock.NumberU64())
 		cbft.log.Debug("Single node mode, confirm now")
 		//only one consensus node, so, each block is highestConfirmed. (lock is needless)
 		current.isConfirmed = true
@@ -834,6 +833,7 @@ func (cbft *Cbft) OnSeal(sealedBlock *types.Block, sealResultCh chan<- *types.Bl
 	//reset cbft.highestLogicalBlockExt cause this block is produced by myself
 	cbft.highestLogical.Store(current)
 	cbft.AddPrepareBlock(sealedBlock)
+	cbft.log.Debug("Seal complete", "hash", sealedBlock.Hash(), "number", sealedBlock.NumberU64(), "producerBlocks", cbft.producerBlocks.Len())
 
 	cbft.broadcastBlock(current)
 	//todo change sign and block state
