@@ -475,7 +475,7 @@ END:
 
 		// May be currently only me produce block, so current view
 		// should be invalid, making a new one.
-		if !cbft.validViewChange() {
+		if !cbft.validViewChange() && (time.Now().Unix()-int64(cbft.viewChange.Timestamp)) > cbft.config.Duration {
 			// need send viewchange
 			cbft.OnSendViewChange()
 
