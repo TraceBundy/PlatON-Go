@@ -214,7 +214,7 @@ func (cbft *Cbft) checkViewChangeVotes(votes []*viewChangeVote) error {
 
 	for _, vote := range votes {
 		if vote.EqualViewChange(cbft.viewChange) {
-			if err := cbft.verifyValidatorSign(cbft.viewChange.BaseBlockNum, vote.ValidatorIndex, vote.ValidatorAddr, vote, vote.Signature[:]); err != nil {
+			if err := cbft.verifyValidatorSign(cbft.nextRoundValidator(cbft.viewChange.BaseBlockNum), vote.ValidatorIndex, vote.ValidatorAddr, vote, vote.Signature[:]); err != nil {
 				log.Error("Verify validator failed", "vote", vote.String(), "err", err)
 				return errInvalidViewChangeVotes
 			}
@@ -602,6 +602,10 @@ func (cbft *Cbft) afterUpdateValidator() {
 	cbft.master = false
 }
 
+func (cbft *Cbft) nextRoundValidator(blockNumber uint64) uint64 {
+	return blockNumber + 1
+}
+
 func (cbft *Cbft) OnViewChangeVote(peerID discover.NodeID, vote *viewChangeVote) error {
 	log.Debug("Receive view change vote", "peer", peerID, "vote", vote.String(), "view", cbft.viewChange.String())
 	bpCtx := context.WithValue(context.Background(), "peer", peerID)
@@ -613,7 +617,7 @@ func (cbft *Cbft) OnViewChangeVote(peerID discover.NodeID, vote *viewChangeVote)
 	//defer cbft.mux.Unlock()
 	hadAgree := cbft.agreeViewChange()
 	if cbft.viewChange != nil && vote.EqualViewChange(cbft.viewChange) {
-		if err := cbft.verifyValidatorSign(cbft.viewChange.BaseBlockNum, vote.ValidatorIndex, vote.ValidatorAddr, vote, vote.Signature[:]); err == nil {
+		if err := cbft.verifyValidatorSign(cbft.nextRoundValidator(cbft.viewChange.BaseBlockNum), vote.ValidatorIndex, vote.ValidatorAddr, vote, vote.Signature[:]); err == nil {
 			cbft.viewChangeVotes[vote.ValidatorAddr] = vote
 			log.Info("Agree receive view change response", "peer", peerID, "viewChangeVotes", len(cbft.viewChangeVotes))
 		} else {
