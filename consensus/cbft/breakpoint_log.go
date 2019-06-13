@@ -69,6 +69,8 @@ var logBP Breakpoint
 var localAddr atomic.Value
 var localID atomic.Value
 
+var logJSON log.Logger
+
 func init() {
 	logBP = &defaultBreakpoint{
 		prepareBP:    new(logPrepareBP),
@@ -76,6 +78,12 @@ func init() {
 		syncBlockBP:  new(logSyncBlockBP),
 		internalBP:   new(logInternalBP),
 	}
+
+	logJSON = log.New()
+	logJSON.SetHandler(log.FuncHandler(func(r *log.Record) error {
+		fmt.Println(r.Msg)
+		return nil
+	}))
 }
 
 type logPrepareBP struct {
@@ -135,7 +143,7 @@ func (bp logPrepareBP) ReceiveBlock(ctx context.Context, block *prepareBlock, cb
 	}
 	msg, err := json.Marshal(span)
 	if err == nil {
-		log.Info(string(msg))
+		logJSON.Info(string(msg))
 	}
 }
 
@@ -153,7 +161,7 @@ func (bp logPrepareBP) ReceiveVote(ctx context.Context, vote *prepareVote, cbft 
 		log.Error("ReceiveVote marshal span fail", "err", err)
 		return
 	}
-	log.Info(string(jsonSpan))
+	logJSON.Info(string(jsonSpan))
 }
 
 func (bp logPrepareBP) AcceptBlock(ctx context.Context, block *prepareBlock, cbft *Cbft) {
@@ -188,7 +196,7 @@ func (bp logPrepareBP) AcceptBlock(ctx context.Context, block *prepareBlock, cbf
 	}
 	msg, err := json.Marshal(span)
 	if err == nil {
-		log.Info(string(msg))
+		logJSON.Info(string(msg))
 	}
 }
 
@@ -224,7 +232,7 @@ func (bp logPrepareBP) CacheBlock(ctx context.Context, block *prepareBlock, cbft
 	}
 	msg, err := json.Marshal(span)
 	if err == nil {
-		log.Info(string(msg))
+		logJSON.Info(string(msg))
 	}
 }
 
@@ -260,7 +268,7 @@ func (bp logPrepareBP) DiscardBlock(ctx context.Context, block *prepareBlock, cb
 	}
 	msg, err := json.Marshal(span)
 	if err == nil {
-		log.Info(string(msg))
+		logJSON.Info(string(msg))
 	}
 }
 
@@ -278,7 +286,7 @@ func (bp logPrepareBP) AcceptVote(ctx context.Context, vote *prepareVote, cbft *
 		log.Error("AcceptVote marshal span to json fail", "err", err)
 		return
 	}
-	log.Info(string(jsonSpan))
+	logJSON.Info(string(jsonSpan))
 }
 
 func (bp logPrepareBP) CacheVote(ctx context.Context, vote *prepareVote, cbft *Cbft) {
@@ -295,7 +303,7 @@ func (bp logPrepareBP) CacheVote(ctx context.Context, vote *prepareVote, cbft *C
 		log.Error("CacheVote marshal span to json fail", "err", err)
 		return
 	}
-	log.Info(string(jsonSpan))
+	logJSON.Info(string(jsonSpan))
 }
 
 func (bp logPrepareBP) DiscardVote(ctx context.Context, vote *prepareVote, cbft *Cbft) {
@@ -312,7 +320,7 @@ func (bp logPrepareBP) DiscardVote(ctx context.Context, vote *prepareVote, cbft 
 		log.Error("DiscardVote marshal span to json fail", "err", err)
 		return
 	}
-	log.Info(string(jsonSpan))
+	logJSON.Info(string(jsonSpan))
 }
 
 func (bp logPrepareBP) SendPrepareVote(ctx context.Context, ext *prepareVote, cbft *Cbft) {
@@ -329,7 +337,7 @@ func (bp logPrepareBP) SendPrepareVote(ctx context.Context, ext *prepareVote, cb
 		log.Error("SendPrepareVote marshal span to json fail", "err", err)
 		return
 	}
-	log.Info(string(jsonSpan))
+	logJSON.Info(string(jsonSpan))
 }
 
 func (bp logPrepareBP) InvalidBlock(ctx context.Context, block *prepareBlock, err error, cbft *Cbft) {
@@ -364,7 +372,7 @@ func (bp logPrepareBP) InvalidBlock(ctx context.Context, block *prepareBlock, er
 	}
 	msg, err := json.Marshal(span)
 	if err == nil {
-		log.Info(string(msg))
+		logJSON.Info(string(msg))
 	}
 }
 
@@ -382,7 +390,7 @@ func (bp logPrepareBP) InvalidVote(ctx context.Context, vote *prepareVote, err e
 		log.Error("InvalidVote marshal span fail", "err", err)
 		return
 	}
-	log.Info(string(jsonSpan))
+	logJSON.Info(string(jsonSpan))
 }
 
 func (bp logPrepareBP) InvalidViewChangeVote(ctx context.Context, block *prepareBlock, err error, cbft *Cbft) {
@@ -422,7 +430,7 @@ func (bp logPrepareBP) InvalidViewChangeVote(ctx context.Context, block *prepare
 		},
 	}
 	if data, err := json.Marshal(span); err == nil {
-		log.Info(string(data))
+		logJSON.Info(string(data))
 	}
 }
 
@@ -440,7 +448,7 @@ func (bp logPrepareBP) TwoThirdVotes(ctx context.Context, ext *prepareVote, cbft
 		log.Error("TwoThirdVotes marshal span fail", "err", err)
 		return
 	}
-	log.Info(string(jsonSpan))
+	logJSON.Info(string(jsonSpan))
 }
 
 type logViewChangeBP struct {
@@ -474,7 +482,7 @@ func (bp logViewChangeBP) SendViewChange(ctx context.Context, view *viewChange, 
 		OperationName: "view_change",
 	}
 	if data, err := json.Marshal(span); err == nil {
-		log.Info(string(data))
+		logJSON.Info(string(data))
 	}
 }
 
@@ -510,7 +518,7 @@ func (bp logViewChangeBP) ReceiveViewChange(ctx context.Context, view *viewChang
 		OperationName: "view_change",
 	}
 	if data, err := json.Marshal(span); err == nil {
-		log.Info(string(data))
+		logJSON.Info(string(data))
 	}
 }
 
@@ -548,7 +556,7 @@ func (bp logViewChangeBP) ReceiveViewChangeVote(ctx context.Context, vote *viewC
 		OperationName: "view_change_vote",
 	}
 	if data, err := json.Marshal(span); err == nil {
-		log.Info(string(data))
+		logJSON.Info(string(data))
 	}
 }
 
@@ -588,7 +596,7 @@ func (bp logViewChangeBP) InvalidViewChange(ctx context.Context, view *viewChang
 		OperationName: "view_change",
 	}
 	if data, err := json.Marshal(span); err == nil {
-		log.Info(string(data))
+		logJSON.Info(string(data))
 	}
 }
 
@@ -630,7 +638,7 @@ func (bp logViewChangeBP) InvalidViewChangeVote(ctx context.Context, vote *viewC
 		OperationName: "view_change_vote",
 	}
 	if data, err := json.Marshal(span); err == nil {
-		log.Info(string(data))
+		logJSON.Info(string(data))
 	}
 }
 
@@ -666,7 +674,7 @@ func (bp logViewChangeBP) InvalidViewChangeBlock(ctx context.Context, view *view
 		OperationName: "view_change",
 	}
 	if data, err := json.Marshal(span); err == nil {
-		log.Info(string(data))
+		logJSON.Info(string(data))
 	}
 }
 
@@ -704,7 +712,7 @@ func (bp logViewChangeBP) TwoThirdViewChangeVotes(ctx context.Context, view *vie
 		OperationName: "view_change_vote",
 	}
 	if data, err := json.Marshal(span); err == nil {
-		log.Info(string(data))
+		logJSON.Info(string(data))
 	}
 }
 
@@ -738,7 +746,7 @@ func (bp logViewChangeBP) SendViewChangeVote(ctx context.Context, vote *viewChan
 		OperationName: "view_change_vote",
 	}
 	if data, err := json.Marshal(span); err == nil {
-		log.Info(string(data))
+		logJSON.Info(string(data))
 	}
 }
 
@@ -770,7 +778,7 @@ func (bp logViewChangeBP) ViewChangeTimeout(ctx context.Context, view *viewChang
 		OperationName: "view_change",
 	}
 	if data, err := json.Marshal(span); err == nil {
-		log.Info(string(data))
+		logJSON.Info(string(data))
 	}
 }
 
@@ -809,7 +817,7 @@ func (bp logSyncBlockBP) SyncBlock(ctx context.Context, ext *BlockExt, cbft *Cbf
 	}
 	msg, err := json.Marshal(span)
 	if err == nil {
-		log.Info(string(msg))
+		logJSON.Info(string(msg))
 	}
 }
 
@@ -845,7 +853,7 @@ func (bp logSyncBlockBP) InvalidBlock(ctx context.Context, ext *BlockExt, err er
 	}
 	msg, err := json.Marshal(span)
 	if err == nil {
-		log.Info(string(msg))
+		logJSON.Info(string(msg))
 	}
 }
 
@@ -887,7 +895,7 @@ func (bp logInternalBP) ExecuteBlock(ctx context.Context, hash common.Hash, numb
 	}
 	msg, err := json.Marshal(span)
 	if err == nil {
-		log.Info(string(msg))
+		logJSON.Info(string(msg))
 	}
 }
 
@@ -927,7 +935,7 @@ func (bp logInternalBP) InvalidBlock(ctx context.Context, hash common.Hash, numb
 	}
 	msg, err := json.Marshal(span)
 	if err == nil {
-		log.Info(string(msg))
+		logJSON.Info(string(msg))
 	}
 
 }
@@ -975,7 +983,7 @@ func (bp logInternalBP) ForkedResetTxPool(ctx context.Context, newHeader *types.
 	}
 	msg, err := json.Marshal(span)
 	if err == nil {
-		log.Info(string(msg))
+		logJSON.Info(string(msg))
 	}
 }
 
@@ -1015,7 +1023,7 @@ func (bp logInternalBP) ResetTxPool(ctx context.Context, ext *BlockExt, elapse t
 	}
 	msg, err := json.Marshal(span)
 	if err == nil {
-		log.Info(string(msg))
+		logJSON.Info(string(msg))
 	}
 }
 
@@ -1068,7 +1076,7 @@ func (bp logInternalBP) NewHighestConfirmedBlock(ctx context.Context, ext *Block
 	}
 	msg, err := json.Marshal(span)
 	if err == nil {
-		log.Info(string(msg))
+		logJSON.Info(string(msg))
 	}
 }
 
@@ -1107,7 +1115,7 @@ func (bp logInternalBP) NewHighestLogicalBlock(ctx context.Context, ext *BlockEx
 	}
 	msg, err := json.Marshal(span)
 	if err == nil {
-		log.Info(string(msg))
+		logJSON.Info(string(msg))
 	}
 }
 
@@ -1146,7 +1154,7 @@ func (bp logInternalBP) NewHighestRootBlock(ctx context.Context, ext *BlockExt, 
 	}
 	msg, err := json.Marshal(span)
 	if err == nil {
-		log.Info(string(msg))
+		logJSON.Info(string(msg))
 	}
 }
 
@@ -1178,7 +1186,7 @@ func (bp logInternalBP) SwitchView(ctx context.Context, view *viewChange, cbft *
 	}
 	msg, err := json.Marshal(span)
 	if err == nil {
-		log.Info(string(msg))
+		logJSON.Info(string(msg))
 	}
 
 }
@@ -1211,7 +1219,7 @@ func (bp logInternalBP) Seal(ctx context.Context, ext *BlockExt, cbft *Cbft) {
 	}
 	msg, err := json.Marshal(span)
 	if err == nil {
-		log.Info(string(msg))
+		logJSON.Info(string(msg))
 	}
 }
 
