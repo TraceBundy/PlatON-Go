@@ -362,8 +362,9 @@ func (cbft *Cbft) viewChanging() bool {
 
 func (cbft *Cbft) AcceptPrepareBlock(request *prepareBlock) AcceptStatus {
 	if cbft.viewChange == nil {
-		cbft.log.Debug("Cache block, viewchange is empty")
-		return Cache
+		//todo need check prepareblock is belong to last accepted viewchange
+		cbft.log.Debug("Accept block, viewchange is empty")
+		return Accept
 	}
 
 	if cbft.viewChange.Timestamp > request.Timestamp && cbft.viewChange.BaseBlockNum < request.Block.NumberU64() {
@@ -398,6 +399,7 @@ func (cbft *Cbft) AcceptPrepareBlock(request *prepareBlock) AcceptStatus {
 
 func (cbft *Cbft) AcceptPrepareVote(vote *prepareVote) AcceptStatus {
 	if vote.Number < cbft.getHighestConfirmed().number {
+		cbft.log.Debug("Discard prepare vote, vote's number lower than local confirmed")
 		return Discard
 	}
 	if (cbft.lastViewChange != nil && vote.Number < cbft.lastViewChange.BaseBlockNum) ||
@@ -406,8 +408,8 @@ func (cbft *Cbft) AcceptPrepareVote(vote *prepareVote) AcceptStatus {
 	}
 	//1. not in viewchanging
 	if cbft.viewChanging() && !cbft.agreeViewChange() {
-		// changing
-		if vote.Number <= cbft.viewChange.BaseBlockNum {
+		// changing, if vote's timestamp equal viewchanging's timestamp, local is too slower than other,need to accept vote
+		if vote.Number <= cbft.viewChange.BaseBlockNum || vote.Timestamp == cbft.viewChange.Timestamp {
 			log.Debug("Accept vote", "hash", vote.Hash, "number", vote.Number, "irr num", cbft.viewChange.BaseBlockNum)
 			return Accept
 		}
