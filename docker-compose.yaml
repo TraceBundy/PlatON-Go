@@ -1,0 +1,40 @@
+version: "3.7"
+services:
+    platon:
+        build: .
+        ports:
+            - "6060:6060"
+            - "6080:6080"
+            - "6789:6789"
+            - "16789:16789"
+        volumes:
+            - ./test_data:/data/platon
+        environment:
+            ENABLE_DEBUG: "true"
+            ENABLE_PPROF: "true"
+            ENABLE_WS: "true"
+            WSAPI: "eth,debug,personal,admin,net"
+            ENABLE_RPC: "true"
+            RPCAPI: "eth,debug,personal,admin,net"
+            VERBOSITY: 4
+            INIT: "true"
+            NEW_ACCOUNT: "true"
+            ENABLE_CBFT_TRACING: "true"
+        logging:
+          driver: "fluentd"
+          options:
+            fluentd-address: "127.0.0.1:24224"
+            tag: "platon"
+
+        depends_on:
+          - fluent
+
+    fluent:
+      image: fluent-es
+      container_name: fluent-platon
+      ports:
+        - "24224:24224"
+        - "24224:24224/udp"
+        - "9292:9292"
+      volumes:
+        - ./test_data:/fluentd/etc

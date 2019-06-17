@@ -1224,7 +1224,6 @@ func (cbft *Cbft) prepareVoteReceiver(peerID discover.NodeID, vote *prepareVote)
 	if ext.inTree && ext.isExecuted && ext.isConfirmed {
 		cbft.bp.PrepareBP().TwoThirdVotes(context.TODO(), vote, cbft)
 		if h := cbft.blockExtMap.FindHighestConfirmedWithHeader(); h != nil {
-			cbft.bp.InternalBP().NewHighestConfirmedBlock(context.TODO(), ext, cbft)
 			cbft.highestConfirmed.Store(h)
 			blockConfirmedMeter.Mark(1)
 			blockConfirmedTimer.UpdateSince(time.Unix(int64(ext.timestamp), 0))
@@ -1233,6 +1232,7 @@ func (cbft *Cbft) prepareVoteReceiver(peerID discover.NodeID, vote *prepareVote)
 		}
 		if !hadSend {
 			cbft.log.Debug("Send Confirmed Block", "hash", ext.block.Hash(), "number", ext.block.NumberU64())
+			cbft.bp.InternalBP().NewHighestConfirmedBlock(context.TODO(), ext, cbft)
 			cbft.handler.SendAllConsensusPeer(&confirmedPrepareBlock{Hash: ext.block.Hash(), Number: ext.block.NumberU64(), VoteBits: ext.prepareVotes.voteBits})
 		}
 	}
@@ -2134,7 +2134,7 @@ func (cbft *Cbft) updateValidator() {
 	// Check if we are a consensus node before updated.
 	isValidatorBefore := cbft.IsConsensusNode()
 
-	newVds, err := cbft.agency.GetValidator(hc.number + 1)
+	newVds, err := cbft.agency.GetValidator(cbft.nextRoundValidator(hc.number))
 	if err != nil {
 		cbft.log.Error("Get validators fail", "number", hc.number, "hash", hc.block.Hash())
 		return

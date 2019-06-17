@@ -55,6 +55,20 @@ type LogRecord struct {
 	Log       interface{} `json:"log"`
 }
 
+func (l *LogRecord) MarshalJSON() ([]byte, error) {
+	type logRecord struct {
+		Timestamp int64  `json:"timestamp"`
+		Log       string `json:"log"`
+	}
+
+	b, _ := json.Marshal(&l.Log)
+	lr := &logRecord{
+		Timestamp: l.Timestamp,
+		Log:       string(b),
+	}
+	return json.Marshal(lr)
+}
+
 type Span struct {
 	Context      Context       `json:"context"`
 	StartTime    time.Time     `json:"start_time"`
@@ -148,20 +162,22 @@ func (bp logPrepareBP) ReceiveBlock(ctx context.Context, block *prepareBlock, cb
 }
 
 func (bp logPrepareBP) ReceiveVote(ctx context.Context, vote *prepareVote, cbft *Cbft) {
-	tags := []Tag{
-		{Key: "action", Value: "receive_prepare_vote"},
-	}
-	span, err := makeSpan(ctx, cbft, vote, tags)
-	if err != nil {
-		log.Error("ReceiveVote make span fail", "err", err)
-		return
-	}
-	jsonSpan, err := json.Marshal(span)
-	if err != nil {
-		log.Error("ReceiveVote marshal span fail", "err", err)
-		return
-	}
-	logJSON.Info(string(jsonSpan))
+	/*
+		tags := []Tag{
+			{Key: "action", Value: "receive_prepare_vote"},
+		}
+		span, err := makeSpan(ctx, cbft, vote, tags)
+		if err != nil {
+			log.Error("ReceiveVote make span fail", "err", err)
+			return
+		}
+		jsonSpan, err := json.Marshal(span)
+		if err != nil {
+			log.Error("ReceiveVote marshal span fail", "err", err)
+			return
+		}
+		logJSON.Info(string(jsonSpan))
+	*/
 }
 
 func (bp logPrepareBP) AcceptBlock(ctx context.Context, block *prepareBlock, cbft *Cbft) {
@@ -273,20 +289,22 @@ func (bp logPrepareBP) DiscardBlock(ctx context.Context, block *prepareBlock, cb
 }
 
 func (bp logPrepareBP) AcceptVote(ctx context.Context, vote *prepareVote, cbft *Cbft) {
-	tags := []Tag{
-		{Key: "action", Value: "accept_prepare_vote"},
-	}
-	span, err := makeSpan(ctx, cbft, vote, tags)
-	if err != nil {
-		log.Error("AcceptVote make span fail", "err", err)
-		return
-	}
-	jsonSpan, err := json.Marshal(span)
-	if err != nil {
-		log.Error("AcceptVote marshal span to json fail", "err", err)
-		return
-	}
-	logJSON.Info(string(jsonSpan))
+	/*
+		tags := []Tag{
+			{Key: "action", Value: "accept_prepare_vote"},
+		}
+		span, err := makeSpan(ctx, cbft, vote, tags)
+		if err != nil {
+			log.Error("AcceptVote make span fail", "err", err)
+			return
+		}
+		jsonSpan, err := json.Marshal(span)
+		if err != nil {
+			log.Error("AcceptVote marshal span to json fail", "err", err)
+			return
+		}
+		logJSON.Info(string(jsonSpan))
+	*/
 }
 
 func (bp logPrepareBP) CacheVote(ctx context.Context, vote *prepareVote, cbft *Cbft) {
@@ -435,20 +453,21 @@ func (bp logPrepareBP) InvalidViewChangeVote(ctx context.Context, block *prepare
 }
 
 func (bp logPrepareBP) TwoThirdVotes(ctx context.Context, ext *prepareVote, cbft *Cbft) {
-	tags := []Tag{
-		{Key: "action", Value: "match_two_third_prepare_vote"},
-	}
-	span, err := makeSpan(ctx, cbft, ext, tags)
-	if err != nil {
-		log.Error("TwoThirdVotes make span fail", "err", err)
-		return
-	}
-	jsonSpan, err := json.Marshal(span)
-	if err != nil {
-		log.Error("TwoThirdVotes marshal span fail", "err", err)
-		return
-	}
-	logJSON.Info(string(jsonSpan))
+	/*
+		tags := []Tag{
+			{Key: "action", Value: "match_two_third_prepare_vote"},
+		}
+		span, err := makeSpan(ctx, cbft, ext, tags)
+		if err != nil {
+			log.Error("TwoThirdVotes make span fail", "err", err)
+			return
+		}
+		jsonSpan, err := json.Marshal(span)
+		if err != nil {
+			log.Error("TwoThirdVotes marshal span fail", "err", err)
+			return
+		}
+		logJSON.Info(string(jsonSpan)) */
 }
 
 type logViewChangeBP struct {
@@ -523,6 +542,7 @@ func (bp logViewChangeBP) ReceiveViewChange(ctx context.Context, view *viewChang
 }
 
 func (bp logViewChangeBP) ReceiveViewChangeVote(ctx context.Context, vote *viewChangeVote, cbft *Cbft) {
+	/*
 	span := &Span{
 		Context: Context{
 			TraceID:   vote.Timestamp,
@@ -557,7 +577,7 @@ func (bp logViewChangeBP) ReceiveViewChangeVote(ctx context.Context, vote *viewC
 	}
 	if data, err := json.Marshal(span); err == nil {
 		logJSON.Info(string(data))
-	}
+	}*/
 }
 
 func (bp logViewChangeBP) InvalidViewChange(ctx context.Context, view *viewChange, err error, cbft *Cbft) {
@@ -973,7 +993,7 @@ func (bp logInternalBP) ForkedResetTxPool(ctx context.Context, newHeader *types.
 		LogRecords: []LogRecord{
 			{
 				Timestamp: time.Now().UnixNano(),
-				Log:       newHeader,
+				Log:       newHeader.Hash(),
 			},
 			{
 				Timestamp: time.Now().UnixNano(),
