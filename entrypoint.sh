@@ -52,8 +52,8 @@ if [ "${ENABLE_V5DISC}" = "true" ]; then
 fi
 
 TRACING=
-if [ "${ENABLE_CBFT_TRACING}" = "true" ];then
-    TRACING="--cbft.breakpoint tracing"
+if [ "${ENABLE_CBFT_TRACING}" = "true" ]; then
+	TRACING="--cbft.breakpoint tracing"
 fi
 
 ${PLATON} --identity platon --datadir ${PLATON_HOME}/data \
