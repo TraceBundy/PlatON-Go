@@ -642,6 +642,12 @@ var (
 		Usage: "breakpoint type:tracing",
 		Value: "",
 	}
+
+	CbftBreakpointLogFlag = cli.StringFlag{
+		Name:  "cbft.breakpoint_log",
+		Usage: "breakpoint log default:stderr",
+		Value: "",
+	}
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating
@@ -1305,6 +1311,9 @@ func SetCbft(ctx *cli.Context, cfg *eth.CbftConfig) {
 	if ctx.GlobalIsSet(CbftBreakpointFlag.Name) {
 		cfg.BreakpointType = ctx.GlobalString(CbftBreakpointFlag.Name)
 	}
+	if ctx.GlobalIsSet(CbftBreakpointLogFlag.Name) {
+		cfg.BreakpointLog = ctx.GlobalString(CbftBreakpointLogFlag.Name)
+	}
 }
 
 // SetDashboardConfig applies dashboard related command line flags to the config.
@@ -1462,7 +1471,7 @@ func MakeChainForCBFT(ctx *cli.Context, stack *node.Node, cfg *eth.Config, nodeC
 	var engine consensus.Engine
 	if config.Cbft != nil {
 		ctx := node.NewServiceContext(nodeCfg, nil, stack.EventMux(), stack.AccountManager())
-		engine = eth.CreateConsensusEngine(ctx, config, nil, false, chainDb, &cfg.CbftConfig, ctx.EventMux);
+		engine = eth.CreateConsensusEngine(ctx, config, nil, false, chainDb, &cfg.CbftConfig, ctx.EventMux)
 	}
 
 	if gcmode := ctx.GlobalString(GCModeFlag.Name); gcmode != "full" && gcmode != "archive" {

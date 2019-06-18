@@ -219,7 +219,9 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 
 	if bft, ok := eth.engine.(consensus.Bft); ok {
 		if cbftEngine, ok := bft.(*cbft.Cbft); ok {
-			cbftEngine.SetBreakpoint(config.CbftConfig.BreakpointType)
+			if err := cbftEngine.SetBreakpoint(config.CbftConfig.BreakpointType, config.CbftConfig.BreakpointLog); err != nil {
+				return nil, err
+			}
 			cbftEngine.SetBlockChainCache(blockChainCache)
 			var agency cbft.Agency
 			// validatorMode:

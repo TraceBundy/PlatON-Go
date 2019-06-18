@@ -27,6 +27,15 @@ func init() {
 type elkPrepareBP struct {
 }
 
+func (bp elkPrepareBP) Close() {
+
+}
+func (bp elkPrepareBP) CommitBlock(ctx context.Context, block *types.Block, txs int, gasUsed uint64, elapse time.Duration) {
+}
+
+func (bp elkPrepareBP) SendBlock(ctx context.Context, block *prepareBlock, cbft *Cbft) {
+}
+
 func (bp elkPrepareBP) ReceiveBlock(ctx context.Context, block *prepareBlock, cbft *Cbft) {
 	peerId := ctx.Value("peer")
 	log.Info("Reporting-ReceiveBlock", "from", peerId,
@@ -156,6 +165,14 @@ func (bp elkViewChangeBP) ReceiveViewChangeVote(ctx context.Context, vote *viewC
 		"hash", vote.BlockHash.TerminalString(),
 		"number", vote.BlockNum)
 	//log.Debug("ReceiveViewChangeVote", "vote", vote.String(), "state", state.String())
+}
+func (bp elkViewChangeBP) AcceptViewChangeVote(ctx context.Context, view *viewChangeVote, cbft *Cbft) {
+	peerId := ctx.Value("peer")
+	log.Debug("Reporting-InvalidViewChange", "from", peerId,
+		"mark", "invalidViewChange",
+		"msgHash", view.MsgHash(),
+		"hash", view.BlockHash,
+		"number", view.BlockNum)
 }
 
 func (bp elkViewChangeBP) InvalidViewChange(ctx context.Context, view *viewChange, err error, cbft *Cbft) {
@@ -319,4 +336,8 @@ func (bp elkInternalBP) Seal(ctx context.Context, ext *BlockExt, cbft *Cbft) {
 	"hash", ext.block.Hash().TerminalString(),
 	"number", ext.block.Number())*/
 	//log.Debug("SwitchView", "block", ext.String(), "state", state.String())
+}
+
+func (bp elkInternalBP) StoreBlock(ctx context.Context, ext *BlockExt, cbft *Cbft) {
+
 }

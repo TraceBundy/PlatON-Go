@@ -151,6 +151,7 @@ type CbftConfig struct {
 
 	//breakpoint type:tracing
 	BreakpointType string
+	BreakpointLog  string
 }
 
 type configMarshaling struct {

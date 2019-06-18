@@ -633,6 +633,9 @@ func (cbft *Cbft) OnViewChangeVote(peerID discover.NodeID, vote *viewChangeVote)
 	hadAgree := cbft.agreeViewChange()
 	if cbft.viewChange != nil && vote.EqualViewChange(cbft.viewChange) {
 		if err := cbft.verifyValidatorSign(cbft.nextRoundValidator(cbft.viewChange.BaseBlockNum), vote.ValidatorIndex, vote.ValidatorAddr, vote, vote.Signature[:]); err == nil {
+			if v := cbft.viewChangeVotes[vote.ValidatorAddr]; v == nil {
+				cbft.bp.ViewChangeBP().AcceptViewChangeVote(bpCtx, vote, cbft)
+			}
 			cbft.viewChangeVotes[vote.ValidatorAddr] = vote
 			log.Info("Agree receive view change response", "peer", peerID, "viewChangeVotes", len(cbft.viewChangeVotes))
 		} else {
@@ -726,6 +729,8 @@ func (cbft *Cbft) broadcastBlock(ext *BlockExt) {
 		return
 	} else {
 		log.Debug("Send block", "nodeID", cbft.config.NodeID, "number", ext.block.Number(), "hash", ext.block.Hash())
+		cbft.bp.PrepareBP().SendBlock(context.TODO(), p, cbft)
+
 		cbft.handler.SendAllConsensusPeer(p)
 	}
 }
@@ -857,6 +862,10 @@ func (b BlockExt) MarshalJSON() ([]byte, error) {
 		RcvTime:         b.rcvTime,
 		ViewChangeVotes: len(b.viewChangeVotes),
 		PrepareVotes:    b.prepareVotes.Len(),
+	}
+	if b.block != nil {
+		ext.Hash = b.block.Hash()
+		ext.Parent = b.block.ParentHash()
 	}
 
 	return json.Marshal(&ext)

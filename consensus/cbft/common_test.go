@@ -11,13 +11,16 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/crypto"
 	"github.com/PlatONnetwork/PlatON-Go/ethdb"
 	"github.com/PlatONnetwork/PlatON-Go/event"
+	"github.com/PlatONnetwork/PlatON-Go/log"
 	"github.com/PlatONnetwork/PlatON-Go/node"
 	"github.com/PlatONnetwork/PlatON-Go/p2p"
 	"github.com/PlatONnetwork/PlatON-Go/p2p/discover"
 	"github.com/PlatONnetwork/PlatON-Go/params"
 	"github.com/PlatONnetwork/PlatON-Go/rlp"
 	"github.com/deckarep/golang-set"
+	"github.com/stretchr/testify/assert"
 	"math/big"
+	"testing"
 	"time"
 )
 
@@ -358,13 +361,13 @@ func randomCBFT(path string, i int) (*Cbft, *testBackend, *testValidator) {
 	return engine, backend, validators
 }
 
-func makeHandler(cbft *Cbft, pid string, msgHash common.Hash) (*baseHandler) {
+func makeHandler(cbft *Cbft, pid string, msgHash common.Hash) *baseHandler {
 	handler := NewHandler(cbft)
 	peerSets := newPeerSet()
 	peer := &peer{
-		id: pid,
+		id:               pid,
 		knownMessageHash: mapset.NewSet(),
-		rw: &fakeRW{},
+		rw:               &fakeRW{},
 	}
 	peer.MarkMessageHash(msgHash)
 	peerSets.Register(peer)
@@ -374,9 +377,9 @@ func makeHandler(cbft *Cbft, pid string, msgHash common.Hash) (*baseHandler) {
 
 func makeGetPrepareVote(blockNum uint64, blockHash common.Hash) *getPrepareVote {
 	p := &getPrepareVote{
-		Number:         blockNum,
-		Hash:           blockHash,
-		VoteBits: 		NewBitArray(32),
+		Number:   blockNum,
+		Hash:     blockHash,
+		VoteBits: NewBitArray(32),
 	}
 	return p
 }
@@ -384,9 +387,9 @@ func makeGetPrepareVote(blockNum uint64, blockHash common.Hash) *getPrepareVote 
 func makePrepareVotes(pri *ecdsa.PrivateKey, timestamp, blockNum uint64, blockHash common.Hash, validatorIndex uint32, validatorAddr common.Address) *prepareVotes {
 	pv := makePrepareVote(pri, timestamp, blockNum, blockHash, validatorIndex, validatorAddr)
 	pvs := &prepareVotes{
-		Hash: blockHash,
+		Hash:   blockHash,
 		Number: blockNum,
-		Votes: []*prepareVote{ pv },
+		Votes:  []*prepareVote{pv},
 	}
 	return pvs
 }
@@ -444,7 +447,7 @@ func makePrepareBlock(block *types.Block, owner *NodeData, view *viewChange, vie
 	return p
 }
 
-func forgeViewChangeVote(view *viewChange) *viewChangeVote{
+func forgeViewChangeVote(view *viewChange) *viewChangeVote {
 	pri, _ := crypto.GenerateKey()
 	resp := &viewChangeVote{
 		ValidatorIndex: uint32(5),
@@ -460,4 +463,17 @@ func forgeViewChangeVote(view *viewChange) *viewChangeVote{
 	sign, _ := crypto.Sign(buf, pri)
 	resp.Signature.SetBytes(sign)
 	return resp
+}
+
+func TestCbft_Genesis(t *testing.T) {
+	block := core.DefaultGenesisBlock().ToBlock(nil)
+	gen := core.DefaultGenesisBlock()
+	block2 := gen.ToBlock(nil)
+	assert.Equal(t, block.Hash(), block2.Hash())
+
+	gen.Config.Cbft.InitialNodes = gen.Config.Cbft.InitialNodes[:0]
+	block3 := gen.ToBlock(nil)
+	assert.NotEqual(t, block.Hash(), block3.Hash())
+
+	log.Debug("sfsd", "s", randomID())
 }
