@@ -285,26 +285,6 @@ func (bp logPrepareBP) ReceiveBlock(ctx context.Context, block *prepareBlock, cb
 }
 
 func (bp logPrepareBP) ReceiveVote(ctx context.Context, vote *prepareVote, cbft *Cbft) {
-	/*
-		tags := []Tag{
-			{Key: "action", Value: "receive_prepare_vote"},
-		}
-		span, err := makeSpan(ctx, cbft, vote, tags)
-		if err != nil {
-			log.Error("ReceiveVote make span fail", "err", err)
-			return
-		}
-		jsonSpan, err := json.Marshal(span)
-		if err != nil {
-			log.Error("ReceiveVote marshal span fail", "err", err)
-			return
-		}
-		logJSON.Info(string(jsonSpan))
-	*/
-
-}
-
-func (bp logPrepareBP) ReceiveVote(ctx context.Context, vote *prepareVote, cbft *Cbft) {
 	//tags := []Tag{
 	//	{Key: "action", Value: "receive_prepare_vote"},
 	//}
@@ -534,10 +514,6 @@ func (bp logPrepareBP) InvalidViewChangeVote(ctx context.Context, block *prepare
 		LogRecords: []LogRecord{
 			{
 				Timestamp: time.Now().UnixNano(),
-				Log:       block,
-			},
-			{
-				Timestamp: time.Now().UnixNano(),
 				Log:       cbft.viewChange,
 			},
 			{
@@ -560,7 +536,7 @@ func (bp logPrepareBP) TwoThirdVotes(ctx context.Context, ext *prepareVote, cbft
 			return
 		}
 		jsonIt.Marshal(span)
-		*/
+	*/
 }
 
 type logViewChangeBP struct {
@@ -839,10 +815,6 @@ func (bp logViewChangeBP) TwoThirdViewChangeVotes(ctx context.Context, view *vie
 			{
 				Timestamp: time.Now().UnixNano(),
 				Log:       view,
-			},
-			{
-				Timestamp: time.Now().UnixNano(),
-				Log:       votes,
 			},
 		},
 		OperationName: "view_change_vote",

@@ -3,10 +3,11 @@ package cbft
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/PlatONnetwork/PlatON-Go/crypto"
-	"github.com/PlatONnetwork/PlatON-Go/rlp"
 	"math/big"
 	"reflect"
+
+	"github.com/PlatONnetwork/PlatON-Go/crypto"
+	"github.com/PlatONnetwork/PlatON-Go/rlp"
 
 	"github.com/PlatONnetwork/PlatON-Go/common"
 	"github.com/PlatONnetwork/PlatON-Go/core/types"
@@ -91,13 +92,13 @@ type prepareBlock struct {
 
 func (pb prepareBlock) MarshalJSON() ([]byte, error) {
 	type prepareBlock struct {
-		Timestamp       uint64            `json:"timestamp"`
-		BlockHash       common.Hash       `json:"block_hash"`
-		BlockNumber     uint64            `json:"block_number"`
-		ProposalIndex   uint32            `json:"proposal_index"`
-		ProposalAddr    common.Address    `json:"proposal_address"`
-		View            *viewChange       `json:"view"`
-		ViewChangeVotes []*viewChangeVote `json:"viewchange_votes"`
+		Timestamp       uint64         `json:"timestamp"`
+		BlockHash       common.Hash    `json:"block_hash"`
+		BlockNumber     uint64         `json:"block_number"`
+		ProposalIndex   uint32         `json:"proposal_index"`
+		ProposalAddr    common.Address `json:"proposal_address"`
+		View            *viewChange    `json:"view"`
+		ViewChangeVotes int            `json:"viewchange_votes"`
 	}
 
 	var p prepareBlock
@@ -108,7 +109,7 @@ func (pb prepareBlock) MarshalJSON() ([]byte, error) {
 	p.ProposalIndex = pb.ProposalIndex
 	p.ProposalAddr = pb.ProposalAddr
 	p.View = pb.View
-	p.ViewChangeVotes = pb.ViewChangeVotes
+	p.ViewChangeVotes = len(pb.ViewChangeVotes)
 
 	return json.Marshal(&p)
 }
@@ -233,7 +234,7 @@ type viewChange struct {
 	ProposalAddr         common.Address          `json:"proposal_address"`
 	BaseBlockNum         uint64                  `json:"base_block_number"`
 	BaseBlockHash        common.Hash             `json:"base_block_hash"`
-	BaseBlockPrepareVote []*prepareVote          `json:"base_block_prepare_votes"`
+	BaseBlockPrepareVote []*prepareVote          `json:"-"`
 	Signature            common.BlockConfirmSign `json:"signature"`
 	Extra                []byte                  `json:"-"`
 }

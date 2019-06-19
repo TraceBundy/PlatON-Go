@@ -85,6 +85,10 @@ func (vv ViewChangeVotes) Bits(cnt int) string {
 }
 
 func (vv ViewChangeVotes) MarshalJSON() ([]byte, error) {
+	if vv == nil {
+		return []byte("{}"), nil
+	}
+
 	type Vote struct {
 		Address common.Address  `json:"address"`
 		Vote    *viewChangeVote `json:"vote"`
