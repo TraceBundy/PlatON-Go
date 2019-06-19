@@ -144,7 +144,8 @@ type Cbft struct {
 
 	startTimeOfEpoch int64
 
-	evPool *EvidencePool
+	evPool  *EvidencePool
+	tracing *tracing
 }
 
 // New creates a concurrent BFT consensus engine
@@ -184,6 +185,7 @@ func New(config *params.CbftConfig, eventMux *event.TypeMux, ctx *node.ServiceCo
 	cbft.router = NewRouter(cbft, cbft.handler)
 	cbft.queues = make(map[string]int)
 	cbft.resetCache, _ = lru.New(maxResetCacheSize)
+	cbft.tracing = NewTracing()
 	return cbft
 }
 
@@ -221,7 +223,7 @@ func (cbft *Cbft) getValidators() *Validators {
 func (cbft *Cbft) ReceivePeerMsg(msg *MsgInfo) {
 	select {
 	case cbft.peerMsgCh <- msg:
-		cbft.log.Debug("Received message from peer", "peer", msg.PeerID.TerminalString(), "msgType", reflect.TypeOf(msg.Msg), "msgHash", msg.Msg.MsgHash().TerminalString(), "BHash", msg.Msg.BHash().TerminalString())
+		cbft.log.Debug("Received message and put to the peerMsgCh", "peer", msg.PeerID.TerminalString(), "msgType", reflect.TypeOf(msg.Msg), "msgHash", msg.Msg.MsgHash().TerminalString(), "BHash", msg.Msg.BHash().TerminalString())
 	case <-cbft.exitCh:
 		cbft.log.Error("Cbft exit")
 	}
@@ -404,9 +406,16 @@ func (cbft *Cbft) handleMsg(info *MsgInfo) {
 	msg, peerID := info.Msg, info.PeerID
 	var err error
 
+	// record the message for received
+	cbft.tracing.RecordReceive(cbft.config.NodeID.TerminalString(),
+		info.PeerID.TerminalString(),
+		info.Msg.MsgHash().TerminalString(),
+		fmt.Sprintf("%T", info.Msg))
+
 	if !cbft.isRunning() {
 		switch msg.(type) {
 		case *prepareBlock,
+			*prepareBlockHash,
 			*prepareVote,
 			*viewChange,
 			*viewChangeVote:
@@ -414,7 +423,6 @@ func (cbft *Cbft) handleMsg(info *MsgInfo) {
 			return
 		}
 	}
-
 	switch msg := msg.(type) {
 	case *prepareBlock:
 		err = cbft.OnNewPrepareBlock(peerID, msg, true)
@@ -438,6 +446,10 @@ func (cbft *Cbft) handleMsg(info *MsgInfo) {
 		err = cbft.OnHighestPrepareBlock(peerID, msg)
 	case *prepareBlockHash:
 		err = cbft.OnPrepareBlockHash(peerID, msg)
+	case *getHighestConfirmedStatus:
+		err = cbft.OnGetHighestConfirmedStatus(peerID, msg)
+	case *highestConfirmedStatus:
+		err = cbft.OnHighestConfirmedStatus(peerID, msg)
 	}
 
 	if err != nil {
@@ -601,7 +613,7 @@ func (cbft *Cbft) OnGetPrepareBlock(peerID discover.NodeID, g *getPrepareBlock) 
 		pb, err := ext.PrepareBlock()
 		if err == nil {
 			cbft.handler.Send(peerID, pb)
-			cbft.log.Debug("Send Block", "peer", peerID, "hash", g.Hash, "number", g.Number)
+			cbft.log.Debug("Send Block", "peer", peerID, "hash", g.Hash, "number", g.Number, "msgHash", pb.MsgHash().TerminalString())
 		}
 	}
 	return nil
@@ -669,6 +681,8 @@ func (cbft *Cbft) OnGetHighestPrepareBlock(peerID discover.NodeID, msg *getHighe
 		if prepare, err := ext.PrepareBlock(); err == nil {
 			unconfirmedBlock = append(unconfirmedBlock, prepare)
 			votes = append(votes, &prepareVotes{Hash: ext.block.Hash(), Number: ext.number, Votes: ext.Votes()})
+		} else {
+			cbft.log.Error("Retrieve block fail", "err", err)
 		}
 	}
 	cbft.log.Debug("Send highestPrepareBlock")
@@ -690,9 +704,19 @@ func (cbft *Cbft) OnHighestPrepareBlock(peerID discover.NodeID, msg *highestPrep
 	}
 
 	if len(msg.CommitedBlock)+len(cbft.syncBlockCh) < cap(cbft.syncBlockCh) {
+		var largestNum int64 = 0
 		for _, block := range msg.CommitedBlock {
 			cbft.log.Debug("Sync Highest Block", "number", block.NumberU64())
 			cbft.InsertChain(block, nil)
+			if block.Number().Int64() > largestNum {
+				largestNum = block.Number().Int64()
+			}
+		}
+		if largestNum != 0 {
+			p, err := cbft.handler.PeerSet().Get(peerID.TerminalString())
+			if err == nil {
+				p.SetConfirmedHighestBn(new(big.Int).SetInt64(largestNum))
+			}
 		}
 	}
 
@@ -746,8 +770,8 @@ func (cbft *Cbft) OnViewChangeVoteTimeout(view *viewChangeVote) {
 }
 
 func (cbft *Cbft) OnPrepareBlockHash(peerID discover.NodeID, msg *prepareBlockHash) error {
-	cbft.log.Debug("Received message of prepareBlockHash", "FromPeerId", peerID.String(),
-		"BlockHash", msg.Hash.Hex(), "Number", msg.Number)
+	cbft.log.Debug("Received message of prepareBlockHash", "FromPeerId", peerID.TerminalString(),
+		"BlockHash", msg.Hash.TerminalString(), "Number", msg.Number)
 	// Prerequisite: Nodes with PrepareBlock data can forward Hash
 	if cbft.blockExtMap.findBlock(msg.Hash, msg.Number) == nil {
 		cbft.handler.Send(peerID, &getPrepareBlock{Hash: msg.Hash, Number: msg.Number})
@@ -758,6 +782,72 @@ func (cbft *Cbft) OnPrepareBlockHash(peerID discover.NodeID, msg *prepareBlockHa
 		go cbft.handler.SendBroadcast(msg)
 	}
 
+	return nil
+}
+
+func (cbft *Cbft) OnGetHighestConfirmedStatus(peerID discover.NodeID, msg *getHighestConfirmedStatus) error {
+	cbft.log.Debug("Received message of getHighestConfirmedStatus", "FromPeerId", peerID.TerminalString(), "Number", msg.Highest, "Type", msg.Type, "msgHash", msg.MsgHash().TerminalString())
+	curConfirmedNum, curLogicNum := cbft.getHighestConfirmed().number, cbft.getHighestLogical().number
+	if msg.Type == HIGHEST_CONFIRMED_BLOCK {
+		if curConfirmedNum < msg.Highest {
+			p, err := cbft.handler.GetPeer(peerID.TerminalString())
+			if err != nil {
+				cbft.log.Error("Failed to get peerID", "peerID", peerID.TerminalString())
+				return err
+			}
+			p.SetConfirmedHighestBn(new(big.Int).SetUint64(msg.Highest))
+			cbft.log.Debug("The current confirmed block height is lower than the specified block height", "current", curConfirmedNum, "specified", msg.Highest)
+			cbft.handler.Send(peerID, &getHighestPrepareBlock{Lowest: cbft.getRootIrreversible().number + 1})
+		} else {
+			cbft.log.Debug("Current confirmed highest larger and make reply highestConfirmedStatus msg", "highest", msg.Highest, "currentNum", curConfirmedNum)
+			cbft.handler.Send(peerID, &highestConfirmedStatus{Highest: curConfirmedNum, Type: msg.Type})
+		}
+	}
+	if msg.Type == HIGHEST_LOGIC_BLOCK {
+		if curLogicNum < msg.Highest {
+			p, err := cbft.handler.GetPeer(peerID.TerminalString())
+			if err != nil {
+				cbft.log.Error("Failed to get peerID", "peerID", peerID.TerminalString())
+				return err
+			}
+			p.SetLogicHighestBn(new(big.Int).SetUint64(msg.Highest))
+			cbft.log.Debug("The current logic block height is lower than the specified block height", "current", curLogicNum, "specified", msg.Highest)
+			cbft.syncMissingBlock(peerID, msg.Highest)
+		} else {
+			cbft.log.Debug("Current logic highest larger and make reply highestConfirmedStatus msg", "highest", msg.Highest, "currentNum", curLogicNum)
+			cbft.handler.Send(peerID, &highestConfirmedStatus{Highest: curConfirmedNum, Type: msg.Type})
+		}
+	}
+	return nil
+}
+
+func (cbft *Cbft) OnHighestConfirmedStatus(peerID discover.NodeID, msg *highestConfirmedStatus) error {
+	cbft.log.Debug("Received message of highestConfirmedStatus", "FromPeerId", peerID.TerminalString(), "Number", msg.Highest, "Type", msg.Type, "msgHash", msg.MsgHash().TerminalString())
+	curConfirmedNum, curLogicNum := cbft.getHighestConfirmed().number, cbft.getHighestLogical().number
+	switch msg.Type {
+	case HIGHEST_CONFIRMED_BLOCK:
+		if curConfirmedNum < msg.Highest {
+			p, err := cbft.handler.GetPeer(peerID.TerminalString())
+			if err != nil {
+				cbft.log.Error("Failed to get peerID for confirmed highest number", "peerID", peerID.TerminalString())
+				return err
+			}
+			p.SetConfirmedHighestBn(new(big.Int).SetUint64(msg.Highest))
+			cbft.log.Debug("The current confirmed block height is lower than the specified block height and getPrepareBlock")
+			cbft.handler.Send(peerID, &getHighestPrepareBlock{Lowest: cbft.getRootIrreversible().number + 1})
+		}
+	case HIGHEST_LOGIC_BLOCK:
+		if curLogicNum < msg.Highest {
+			p, err := cbft.handler.GetPeer(peerID.TerminalString())
+			if err != nil {
+				cbft.log.Error("Failed to get peerID for logic highest number", "peerID", peerID.TerminalString())
+				return err
+			}
+			p.SetLogicHighestBn(new(big.Int).SetUint64(msg.Highest))
+			cbft.log.Debug("The current logic block height is lower than the specified block height and getPrepareBlock")
+			cbft.syncMissingBlock(peerID, msg.Highest)
+		}
+	}
 	return nil
 }
 
@@ -929,7 +1019,7 @@ func (cbft *Cbft) OnSendViewChange() {
 // Receive view from other nodes
 // Need verify timestamp , signature, promise highest confirmed block
 func (cbft *Cbft) OnViewChange(peerID discover.NodeID, view *viewChange) error {
-	cbft.log.Debug("Receive view change", "peer", peerID, "nodeID", cbft.getValidators().NodeID(int(view.ProposalIndex)), "view", view.String())
+	cbft.log.Debug("Receive view change", "peer", peerID, "nodeID", cbft.getValidators().NodeID(int(view.ProposalIndex)), "view", view.String(), "msgHash", view.MsgHash().TerminalString())
 
 	if cbft.viewChange != nil && cbft.viewChange.Equal(view) {
 		cbft.log.Debug("Duplication view change message, discard this")
@@ -983,7 +1073,7 @@ func (cbft *Cbft) OnViewChange(peerID discover.NodeID, view *viewChange) error {
 
 	resp.Signature.SetBytes(sign)
 	cbft.viewChangeResp = resp
-	cbft.log.Info("Response viewChangeVote", "msgHash", resp.MsgHash())
+	cbft.log.Info("Response viewChangeVote", "viewChangeResp", resp, "msgHash", resp.MsgHash())
 	time.AfterFunc(time.Duration(cbft.config.Period)*time.Second, func() {
 		cbft.viewChangeVoteTimeoutCh <- resp
 	})
@@ -1042,6 +1132,7 @@ func (cbft *Cbft) flushReadyBlock() bool {
 // Receive prepare block from the other consensus node.
 // Need check something ,such as validator index, address, view is equal local view , and last verify signature
 func (cbft *Cbft) OnNewPrepareBlock(nodeId discover.NodeID, request *prepareBlock, propagation bool) error {
+	cbft.log.Info("Received a PrepareBlockMsg", "FromPeerId", nodeId.TerminalString(), "prepare", request.String(), "msgHash", request.MsgHash())
 	bpCtx := context.WithValue(context.TODO(), "peer", nodeId)
 	cbft.bp.PrepareBP().ReceiveBlock(bpCtx, request, cbft)
 
@@ -2246,6 +2337,38 @@ func (cbft *Cbft) AddJournal(msg *MsgInfo) {
 	cbft.ReceivePeerMsg(msg)
 }
 
+func (cbft *Cbft) isForwarded(nodeId discover.NodeID, msg Message) bool {
+	peers := cbft.handler.PeerSet().Peers()
+	// message of prepareBlock cannot be filtered
+	for _, peer := range peers {
+		if peer.id == fmt.Sprintf("%x", nodeId.Bytes()[:8]) {
+			continue
+		}
+		if peer.knownMessageHash.Contains(msg.MsgHash()) {
+			return true
+		}
+	}
+	return false
+}
+
+func (cbft *Cbft) isRepeated(nodeId discover.NodeID, msg Message) bool {
+	peers := cbft.handler.PeerSet().Peers()
+	for _, peer := range peers {
+		if peer.id == fmt.Sprintf("%x", nodeId.Bytes()[:8]) && peer.knownMessageHash.Contains(msg.MsgHash()) {
+			return true
+		}
+	}
+	return false
+}
+
 func (cbft *Cbft) CommitBlockBP(block *types.Block, txs int, gasUsed uint64, elapse time.Duration) {
 	cbft.bp.PrepareBP().CommitBlock(context.TODO(), block, txs, gasUsed, elapse)
+}
+
+func (cbft *Cbft) TracingSwitch(flag int8) {
+	if flag == 1 {
+		cbft.tracing.On()
+	} else {
+		cbft.tracing.Off()
+	}
 }

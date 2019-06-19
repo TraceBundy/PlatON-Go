@@ -1015,3 +1015,48 @@ func TestCbft_VerifyHeaders(t *testing.T) {
 	_, results = engine.VerifyHeaders(engine.blockChain, []*types.Header{header}, []bool{false})
 	assert.Nil(t, <-results)
 }
+
+func TestCbft_OnGetHighestConfirmedStatus(t *testing.T) {
+	path := path()
+	defer os.RemoveAll(path)
+	engine, _, _ := randomCBFT(path, 1)
+	mockHandler := NewMockHandler()
+	engine.handler = mockHandler
+	peerId := randomID()
+
+	testCases := []struct {
+		msg  *getHighestConfirmedStatus
+	}{
+		{msg: &getHighestConfirmedStatus{Highest: 1, Type: 0}},
+		{msg: &getHighestConfirmedStatus{Highest: 1, Type: 1}},
+		{msg: &getHighestConfirmedStatus{Highest: 0, Type: 0}},
+		{msg: &getHighestConfirmedStatus{Highest: 0, Type: 1}},
+	}
+	var err error
+	for _, v := range testCases {
+		err = engine.OnGetHighestConfirmedStatus(peerId, v.msg)
+		assert.Nil(t, err)
+	}
+}
+
+func TestCbft_OnHighestConfirmedStatus(t *testing.T) {
+	path := path()
+	defer os.RemoveAll(path)
+	engine, _, _ := randomCBFT(path, 1)
+	mockHandler := NewMockHandler()
+	engine.handler = mockHandler
+	peerId := randomID()
+
+	testCases := []struct{
+		msg *highestConfirmedStatus
+	}{
+		{msg: &highestConfirmedStatus{Highest: 1, Type:0,}},
+		{msg: &highestConfirmedStatus{Highest: 1, Type:1,}},
+		{msg: &highestConfirmedStatus{Highest: 0, Type:0,}},
+		{msg: &highestConfirmedStatus{Highest: 0, Type:1,}},
+	}
+	for _, v := range testCases {
+		err := engine.OnHighestConfirmedStatus(peerId, v.msg)
+		assert.Nil(t, err)
+	}
+}

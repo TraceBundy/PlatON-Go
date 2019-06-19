@@ -2,6 +2,7 @@ package cbft
 
 import (
 	"crypto/ecdsa"
+	"errors"
 	"fmt"
 	"github.com/PlatONnetwork/PlatON-Go/common"
 	"github.com/PlatONnetwork/PlatON-Go/core"
@@ -101,6 +102,14 @@ func (mockHandler) Protocols() []p2p.Protocol {
 
 func (m mockHandler) PeerSet() *peerSet {
 	return m.peerSet
+}
+
+func (m mockHandler) GetPeer(peerID string) (*peer, error) {
+	if peerID == "" {
+		return nil, errors.New("Invalid peerId")
+	}
+	p := buildPeer()
+	return p, nil
 }
 
 func init() {

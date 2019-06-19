@@ -399,6 +399,11 @@ web3._extend({
 			name: 'consensusStatus',
 			call: 'debug_consensusStatus',
 		}),
+		new web3._extend.Method({
+			name: 'tracingSwitch',
+			call: 'debug_tracingSwitch',
+			params: 1,
+		}),
 	],
 	properties: []
 });
