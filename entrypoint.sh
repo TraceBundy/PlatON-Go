@@ -62,4 +62,4 @@ ${PLATON} --identity platon --datadir ${PLATON_HOME}/data \
 	${PPROF} ${WS} ${RPC} \
 	--metrics --ipcdisable --txpool.nolocals \
 	--gcmode archive ${BOOT} ${DISCOVER} ${V5DISC} ${TRACING} \
-	--maxpeers 10 --maxconsensuspeers 100
+	--maxpeers 25 --maxconsensuspeers 100
