@@ -61,4 +61,5 @@ ${PLATON} --identity platon --datadir ${PLATON_HOME}/data \
 	--port ${P2PPORT} ${DEBUG} --verbosity ${VERBOSITY} \
 	${PPROF} ${WS} ${RPC} \
 	--metrics --ipcdisable --txpool.nolocals \
-	--gcmode archive ${BOOT} ${DISCOVER} ${V5DISC} ${TRACING}
+	--gcmode archive ${BOOT} ${DISCOVER} ${V5DISC} ${TRACING} \
+	--maxpeers 10 --maxconsensuspeers 100
