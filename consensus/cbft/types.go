@@ -424,7 +424,7 @@ func (cbft *Cbft) AcceptPrepareVote(vote *prepareVote) AcceptStatus {
 	}
 
 	if cbft.viewChange != nil && cbft.viewChangeVotes != nil {
-		log.Warn("Cache vote", "view", cbft.viewChange.String(), "view prepareVotes", cbft.viewVoteState())
+		log.Warn("Cache vote", "view", cbft.viewChange.String())
 	} else {
 		log.Warn("Cache vote", "viewchange", cbft.viewChange != nil, "has view vote", cbft.viewChangeVotes != nil)
 	}

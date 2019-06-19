@@ -446,10 +446,10 @@ func (cbft *Cbft) handleMsg(info *MsgInfo) {
 		err = cbft.OnHighestPrepareBlock(peerID, msg)
 	case *prepareBlockHash:
 		err = cbft.OnPrepareBlockHash(peerID, msg)
-	case *getHighestConfirmedStatus:
-		err = cbft.OnGetHighestConfirmedStatus(peerID, msg)
-	case *highestConfirmedStatus:
-		err = cbft.OnHighestConfirmedStatus(peerID, msg)
+	case *getLatestStatus:
+		err = cbft.OnGetLatestStatus(peerID, msg)
+	case *latestStatus:
+		err = cbft.OnLatestStatus(peerID, msg)
 	}
 
 	if err != nil {
@@ -785,7 +785,7 @@ func (cbft *Cbft) OnPrepareBlockHash(peerID discover.NodeID, msg *prepareBlockHa
 	return nil
 }
 
-func (cbft *Cbft) OnGetHighestConfirmedStatus(peerID discover.NodeID, msg *getHighestConfirmedStatus) error {
+func (cbft *Cbft) OnGetLatestStatus(peerID discover.NodeID, msg *getLatestStatus) error {
 	cbft.log.Debug("Received message of getHighestConfirmedStatus", "FromPeerId", peerID.TerminalString(), "Number", msg.Highest, "Type", msg.Type, "msgHash", msg.MsgHash().TerminalString())
 	curConfirmedNum, curLogicNum := cbft.getHighestConfirmed().number, cbft.getHighestLogical().number
 	if msg.Type == HIGHEST_CONFIRMED_BLOCK {
@@ -800,7 +800,7 @@ func (cbft *Cbft) OnGetHighestConfirmedStatus(peerID discover.NodeID, msg *getHi
 			cbft.handler.Send(peerID, &getHighestPrepareBlock{Lowest: cbft.getRootIrreversible().number + 1})
 		} else {
 			cbft.log.Debug("Current confirmed highest larger and make reply highestConfirmedStatus msg", "highest", msg.Highest, "currentNum", curConfirmedNum)
-			cbft.handler.Send(peerID, &highestConfirmedStatus{Highest: curConfirmedNum, Type: msg.Type})
+			cbft.handler.Send(peerID, &latestStatus{Highest: curConfirmedNum, Type: msg.Type})
 		}
 	}
 	if msg.Type == HIGHEST_LOGIC_BLOCK {
@@ -815,13 +815,13 @@ func (cbft *Cbft) OnGetHighestConfirmedStatus(peerID discover.NodeID, msg *getHi
 			cbft.syncMissingBlock(peerID, msg.Highest)
 		} else {
 			cbft.log.Debug("Current logic highest larger and make reply highestConfirmedStatus msg", "highest", msg.Highest, "currentNum", curLogicNum)
-			cbft.handler.Send(peerID, &highestConfirmedStatus{Highest: curConfirmedNum, Type: msg.Type})
+			cbft.handler.Send(peerID, &latestStatus{Highest: curConfirmedNum, Type: msg.Type})
 		}
 	}
 	return nil
 }
 
-func (cbft *Cbft) OnHighestConfirmedStatus(peerID discover.NodeID, msg *highestConfirmedStatus) error {
+func (cbft *Cbft) OnLatestStatus(peerID discover.NodeID, msg *latestStatus) error {
 	cbft.log.Debug("Received message of highestConfirmedStatus", "FromPeerId", peerID.TerminalString(), "Number", msg.Highest, "Type", msg.Type, "msgHash", msg.MsgHash().TerminalString())
 	curConfirmedNum, curLogicNum := cbft.getHighestConfirmed().number, cbft.getHighestLogical().number
 	switch msg.Type {
@@ -2351,7 +2351,7 @@ func (cbft *Cbft) isForwarded(nodeId discover.NodeID, msg Message) bool {
 	return false
 }
 
-func (cbft *Cbft) isRepeated(nodeId discover.NodeID, msg Message) bool {
+/*func (cbft *Cbft) isRepeated(nodeId discover.NodeID, msg Message) bool {
 	peers := cbft.handler.PeerSet().Peers()
 	for _, peer := range peers {
 		if peer.id == fmt.Sprintf("%x", nodeId.Bytes()[:8]) && peer.knownMessageHash.Contains(msg.MsgHash()) {
@@ -2359,7 +2359,7 @@ func (cbft *Cbft) isRepeated(nodeId discover.NodeID, msg Message) bool {
 		}
 	}
 	return false
-}
+}*/
 
 func (cbft *Cbft) CommitBlockBP(block *types.Block, txs int, gasUsed uint64, elapse time.Duration) {
 	cbft.bp.PrepareBP().CommitBlock(context.TODO(), block, txs, gasUsed, elapse)
