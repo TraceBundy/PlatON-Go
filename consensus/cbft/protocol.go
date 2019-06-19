@@ -28,15 +28,15 @@ const (
 	GetHighestPrepareBlockMsg = 0x08
 	HighestPrepareBlockMsg    = 0x09
 
-	CBFTStatusMsg       = 0x0a
-	PrepareBlockHashMsg = 0x0b
+	CBFTStatusMsg              = 0x0a
+	PrepareBlockHashMsg        = 0x0b
 	GetHighestConfirmStatusMsg = 0x0c
-	HighestConfirmedStatusMsg = 0x0d
+	HighestConfirmedStatusMsg  = 0x0d
 )
 
 const (
-	HIGHEST_CONFIRMED_BLOCK = iota			// for highestConfirmedBlock
-	HIGHEST_LOGIC_BLOCK						// for highestLogicBlock
+	HIGHEST_CONFIRMED_BLOCK = iota // for highestConfirmedBlock
+	HIGHEST_LOGIC_BLOCK            // for highestLogicBlock
 )
 
 type errCode int
@@ -605,9 +605,9 @@ func (v *signBitArray) BHash() common.Hash {
 }
 
 type cbftStatusData struct {
-	LogicBn			*big.Int
-	ConfirmedBn     *big.Int
-	CurrentBlock 	common.Hash
+	LogicBn      *big.Int
+	ConfirmedBn  *big.Int
+	CurrentBlock common.Hash
 }
 
 func (s *cbftStatusData) String() string {
@@ -633,7 +633,7 @@ func (s *cbftStatusData) BHash() common.Hash {
 
 type getHighestConfirmedStatus struct {
 	Highest uint64
-	Type 	uint64
+	Type    uint64
 }
 
 func (s *getHighestConfirmedStatus) String() string {
@@ -660,7 +660,7 @@ func (s *getHighestConfirmedStatus) BHash() common.Hash {
 
 type highestConfirmedStatus struct {
 	Highest uint64
-	Type 	uint64
+	Type    uint64
 }
 
 func (s *highestConfirmedStatus) String() string {
@@ -684,8 +684,6 @@ func (s *highestConfirmedStatus) MsgHash() common.Hash {
 func (s *highestConfirmedStatus) BHash() common.Hash {
 	return common.Hash{}
 }
-
-
 
 var (
 	messages = []interface{}{
