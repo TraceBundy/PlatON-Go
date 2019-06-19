@@ -28,10 +28,10 @@ const (
 	GetHighestPrepareBlockMsg = 0x08
 	HighestPrepareBlockMsg    = 0x09
 
-	CBFTStatusMsg              = 0x0a
-	PrepareBlockHashMsg        = 0x0b
-	GetHighestConfirmStatusMsg = 0x0c
-	HighestConfirmedStatusMsg  = 0x0d
+	CBFTStatusMsg       = 0x0a
+	PrepareBlockHashMsg = 0x0b
+	GetLatestStatusMsg  = 0x0c
+	LatestStatusMsg     = 0x0d
 )
 
 const (
@@ -631,19 +631,19 @@ func (s *cbftStatusData) BHash() common.Hash {
 	return s.CurrentBlock
 }
 
-type getHighestConfirmedStatus struct {
+type getLatestStatus struct {
 	Highest uint64
 	Type    uint64
 }
 
-func (s *getHighestConfirmedStatus) String() string {
+func (s *getLatestStatus) String() string {
 	if s == nil {
 		return ""
 	}
 	return fmt.Sprintf("[Highest:%d]", s.Highest)
 }
 
-func (s *getHighestConfirmedStatus) MsgHash() common.Hash {
+func (s *getLatestStatus) MsgHash() common.Hash {
 	if s == nil {
 		return common.Hash{}
 	}
@@ -651,26 +651,26 @@ func (s *getHighestConfirmedStatus) MsgHash() common.Hash {
 	//byt = append(byt, uint64ToBytes(s.Highest)...)
 	//byt = append(byt, uint64ToBytes(s.Type)...)
 	byt := combineBytes(uint64ToBytes(s.Highest), uint64ToBytes(s.Type))
-	return produceHash(GetHighestConfirmStatusMsg, byt)
+	return produceHash(GetLatestStatusMsg, byt)
 }
 
-func (s *getHighestConfirmedStatus) BHash() common.Hash {
+func (s *getLatestStatus) BHash() common.Hash {
 	return common.Hash{}
 }
 
-type highestConfirmedStatus struct {
+type latestStatus struct {
 	Highest uint64
 	Type    uint64
 }
 
-func (s *highestConfirmedStatus) String() string {
+func (s *latestStatus) String() string {
 	if s == nil {
 		return ""
 	}
 	return fmt.Sprintf("[Highest:%d]", s.Highest)
 }
 
-func (s *highestConfirmedStatus) MsgHash() common.Hash {
+func (s *latestStatus) MsgHash() common.Hash {
 	if s == nil {
 		return common.Hash{}
 	}
@@ -678,10 +678,10 @@ func (s *highestConfirmedStatus) MsgHash() common.Hash {
 	byt = append(byt, uint64ToBytes(s.Highest)...)
 	byt = append(byt, uint64ToBytes(s.Type)...)*/
 	byt := combineBytes(uint64ToBytes(s.Highest), uint64ToBytes(s.Type))
-	return produceHash(HighestConfirmedStatusMsg, byt)
+	return produceHash(LatestStatusMsg, byt)
 }
 
-func (s *highestConfirmedStatus) BHash() common.Hash {
+func (s *latestStatus) BHash() common.Hash {
 	return common.Hash{}
 }
 
@@ -699,8 +699,8 @@ var (
 		highestPrepareBlock{},
 		cbftStatusData{},
 		prepareBlockHash{},
-		getHighestConfirmedStatus{},
-		highestConfirmedStatus{},
+		getLatestStatus{},
+		latestStatus{},
 	}
 )
 
@@ -730,10 +730,10 @@ func MessageType(msg interface{}) uint64 {
 		return CBFTStatusMsg
 	case *prepareBlockHash:
 		return PrepareBlockHashMsg
-	case *getHighestConfirmedStatus:
-		return GetHighestConfirmStatusMsg
-	case *highestConfirmedStatus:
-		return HighestConfirmedStatusMsg
+	case *getLatestStatus:
+		return GetLatestStatusMsg
+	case *latestStatus:
+		return LatestStatusMsg
 	}
 	panic(fmt.Sprintf("invalid msg type %v", reflect.TypeOf(msg)))
 }
