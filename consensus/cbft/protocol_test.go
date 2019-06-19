@@ -391,12 +391,29 @@ func TestCbftStatusData(t *testing.T) {
 	var empty *cbftStatusData
 	pbh := &cbftStatusData{
 		CurrentBlock: common.BytesToHash([]byte("I'm hash")),
-		BN: big.NewInt(1),
+		ConfirmedBn: big.NewInt(1),
+		LogicBn: big.NewInt(1),
 	}
 	check(t, empty, pbh)
 }
 
+func TestGetHighestConfirmedStatus(t *testing.T) {
+	var empty *getHighestConfirmedStatus
+	pbh := &getHighestConfirmedStatus{
+		Highest: 1,
+		Type: 1,
+	}
+	check(t, empty, pbh)
+}
 
+func TestHighestConfirmedStatus(t *testing.T) {
+	var empty *highestConfirmedStatus
+	pbh := &getHighestConfirmedStatus{
+		Highest: 1,
+		Type: 1,
+	}
+	check(t, empty, pbh)
+}
 
 
 

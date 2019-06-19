@@ -86,6 +86,9 @@ func (pb *ProducerBlocks) MaxSequenceBlock() *types.Block {
 }
 
 func (pb *ProducerBlocks) Len() int {
+	if pb == nil {
+		return 0
+	}
 	pb.lock.Lock()
 	defer pb.lock.Unlock()
 

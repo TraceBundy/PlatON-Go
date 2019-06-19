@@ -154,7 +154,8 @@ func buildGetHighestPrepareBlock() *getHighestPrepareBlock {
 
 func buildCbftStatusData() *cbftStatusData {
 	return &cbftStatusData{
-		BN: big.NewInt(999),
+		LogicBn: big.NewInt(999),
+		ConfirmedBn: big.NewInt(999),
 		CurrentBlock: common.HexToHash("0x8bfded8b3ccdd1d31bf049b4abf72415a0cc829cdcc0b750a73e0da5df066329"),
 	}
 }

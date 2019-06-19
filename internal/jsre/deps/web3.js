@@ -5443,6 +5443,12 @@ var methods = function () {
       params: 0
     });
 
+    var tracingSwitch = new Method({
+        name: 'tracingSwitch',
+        call: 'debug_tracingSwitch',
+        params: 1
+    });
+
     return [
         getBalance,
         getStorageAt,
@@ -5469,6 +5475,7 @@ var methods = function () {
         getWork,
         consensusStatus,
         evidences,
+        tracingSwitch,
     ];
 };
 

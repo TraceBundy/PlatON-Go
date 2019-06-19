@@ -30,6 +30,13 @@ const (
 
 	CBFTStatusMsg       = 0x0a
 	PrepareBlockHashMsg = 0x0b
+	GetHighestConfirmStatusMsg = 0x0c
+	HighestConfirmedStatusMsg = 0x0d
+)
+
+const (
+	HIGHEST_CONFIRMED_BLOCK = iota			// for highestConfirmedBlock
+	HIGHEST_LOGIC_BLOCK						// for highestLogicBlock
 )
 
 type errCode int
@@ -133,10 +140,11 @@ func (pb *prepareBlock) MsgHash() common.Hash {
 	if pb == nil {
 		return common.Hash{}
 	}
-	bytes := make([]byte, 0)
-	bytes = append(bytes, pb.Block.Hash().Bytes()...)
-	bytes = append(bytes, pb.ProposalAddr.Bytes()...)
-	bytes = append(bytes, uint64ToBytes(pb.Timestamp)...)
+	//bytes := make([]byte, 0)
+	//bytes = append(bytes, pb.Block.Hash().Bytes()...)
+	//bytes = append(bytes, pb.ProposalAddr.Bytes()...)
+	//bytes = append(bytes, uint64ToBytes(pb.Timestamp)...)
+	bytes := combineBytes(pb.Block.Hash().Bytes(), pb.ProposalAddr.Bytes(), uint64ToBytes(pb.Timestamp))
 	return produceHash(PrepareBlockMsg, bytes)
 }
 
@@ -145,11 +153,6 @@ func (pb *prepareBlock) BHash() common.Hash {
 		return common.Hash{}
 	}
 	return pb.Block.Hash()
-}
-
-type prepareBlockHash struct {
-	Hash   common.Hash
-	Number uint64
 }
 
 func (pbh *prepareBlockHash) String() string {
@@ -171,6 +174,11 @@ func (pbh *prepareBlockHash) BHash() common.Hash {
 		return common.Hash{}
 	}
 	return pbh.Hash
+}
+
+type prepareBlockHash struct {
+	Hash   common.Hash
+	Number uint64
 }
 
 type prepareVote struct {
@@ -214,10 +222,11 @@ func (pv *prepareVote) MsgHash() common.Hash {
 	if pv == nil {
 		return common.Hash{}
 	}
-	bytes := make([]byte, 0)
+	/*bytes := make([]byte, 0)
 	bytes = append(bytes, pv.Hash.Bytes()...)
 	bytes = append(bytes, pv.ValidatorAddr.Bytes()...)
-	bytes = append(bytes, uint64ToBytes(pv.Timestamp)...)
+	bytes = append(bytes, uint64ToBytes(pv.Timestamp)...)*/
+	bytes := combineBytes(pv.Hash.Bytes(), pv.ValidatorAddr.Bytes(), uint64ToBytes(pv.Timestamp))
 	return produceHash(PrepareVoteMsg, bytes)
 }
 
@@ -271,10 +280,11 @@ func (v *viewChange) MsgHash() common.Hash {
 	if v == nil {
 		return common.Hash{}
 	}
-	bytes := make([]byte, 0)
+	/*bytes := make([]byte, 0)
 	bytes = append(bytes, v.Signature.Bytes()...)
 	bytes = append(bytes, v.ProposalAddr.Bytes()...)
-	bytes = append(bytes, uint64ToBytes(v.Timestamp)...)
+	bytes = append(bytes, uint64ToBytes(v.Timestamp)...)*/
+	bytes := combineBytes(v.Signature.Bytes(), v.ProposalAddr.Bytes(), uint64ToBytes(v.Timestamp))
 	return produceHash(ViewChangeMsg, bytes)
 }
 
@@ -365,11 +375,11 @@ func (v *viewChangeVote) MsgHash() common.Hash {
 	if v == nil {
 		return common.Hash{}
 	}
-	bytes := make([]byte, 0)
+	/*bytes := make([]byte, 0)
 	bytes = append(bytes, v.Signature.Bytes()...)
 	bytes = append(bytes, v.ValidatorAddr.Bytes()[:5]...)
-	bytes = append(bytes, uint64ToBytes(v.Timestamp)...)
-
+	bytes = append(bytes, uint64ToBytes(v.Timestamp)...)*/
+	bytes := combineBytes(v.Signature.Bytes(), v.ValidatorAddr.Bytes(), uint64ToBytes(v.Timestamp))
 	return produceHash(ViewChangeVoteMsg, bytes)
 }
 
@@ -493,7 +503,8 @@ func (gpb *getPrepareBlock) MsgHash() common.Hash {
 	if gpb == nil {
 		return common.Hash{}
 	}
-	return produceHash(GetPrepareBlockMsg, gpb.Hash.Bytes())
+	byt := combineBytes(gpb.Hash.Bytes(), uint64ToBytes(gpb.Number))
+	return produceHash(GetPrepareBlockMsg, byt)
 }
 
 func (gpb *getPrepareBlock) BHash() common.Hash {
@@ -594,15 +605,16 @@ func (v *signBitArray) BHash() common.Hash {
 }
 
 type cbftStatusData struct {
-	BN           *big.Int
-	CurrentBlock common.Hash
+	LogicBn			*big.Int
+	ConfirmedBn     *big.Int
+	CurrentBlock 	common.Hash
 }
 
 func (s *cbftStatusData) String() string {
 	if s == nil {
 		return ""
 	}
-	return fmt.Sprintf("[BlockNumber:%d, BlockHash:%s]", s.BN.Int64(), s.CurrentBlock.String())
+	return fmt.Sprintf("[confirmedBn:%d, logicBn:%d, BlockHash:%s]", s.ConfirmedBn.Int64(), s.LogicBn.Int64(), s.CurrentBlock.String())
 }
 
 func (s *cbftStatusData) MsgHash() common.Hash {
@@ -619,6 +631,62 @@ func (s *cbftStatusData) BHash() common.Hash {
 	return s.CurrentBlock
 }
 
+type getHighestConfirmedStatus struct {
+	Highest uint64
+	Type 	uint64
+}
+
+func (s *getHighestConfirmedStatus) String() string {
+	if s == nil {
+		return ""
+	}
+	return fmt.Sprintf("[Highest:%d]", s.Highest)
+}
+
+func (s *getHighestConfirmedStatus) MsgHash() common.Hash {
+	if s == nil {
+		return common.Hash{}
+	}
+	//byt := make([]byte, 0)
+	//byt = append(byt, uint64ToBytes(s.Highest)...)
+	//byt = append(byt, uint64ToBytes(s.Type)...)
+	byt := combineBytes(uint64ToBytes(s.Highest), uint64ToBytes(s.Type))
+	return produceHash(GetHighestConfirmStatusMsg, byt)
+}
+
+func (s *getHighestConfirmedStatus) BHash() common.Hash {
+	return common.Hash{}
+}
+
+type highestConfirmedStatus struct {
+	Highest uint64
+	Type 	uint64
+}
+
+func (s *highestConfirmedStatus) String() string {
+	if s == nil {
+		return ""
+	}
+	return fmt.Sprintf("[Highest:%d]", s.Highest)
+}
+
+func (s *highestConfirmedStatus) MsgHash() common.Hash {
+	if s == nil {
+		return common.Hash{}
+	}
+	/*byt := make([]byte, 0)
+	byt = append(byt, uint64ToBytes(s.Highest)...)
+	byt = append(byt, uint64ToBytes(s.Type)...)*/
+	byt := combineBytes(uint64ToBytes(s.Highest), uint64ToBytes(s.Type))
+	return produceHash(HighestConfirmedStatusMsg, byt)
+}
+
+func (s *highestConfirmedStatus) BHash() common.Hash {
+	return common.Hash{}
+}
+
+
+
 var (
 	messages = []interface{}{
 		prepareBlock{},
@@ -633,6 +701,8 @@ var (
 		highestPrepareBlock{},
 		cbftStatusData{},
 		prepareBlockHash{},
+		getHighestConfirmedStatus{},
+		highestConfirmedStatus{},
 	}
 )
 
@@ -662,6 +732,10 @@ func MessageType(msg interface{}) uint64 {
 		return CBFTStatusMsg
 	case *prepareBlockHash:
 		return PrepareBlockHashMsg
+	case *getHighestConfirmedStatus:
+		return GetHighestConfirmStatusMsg
+	case *highestConfirmedStatus:
+		return HighestConfirmedStatusMsg
 	}
 	panic(fmt.Sprintf("invalid msg type %v", reflect.TypeOf(msg)))
 }

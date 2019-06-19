@@ -1472,3 +1472,10 @@ func (s *PublicConsensusAPI) Evidences() string {
 	}
 	return ""
 }
+
+func (s *PublicConsensusAPI) TracingSwitch(ctx context.Context, flag uint) string {
+	if bft, ok := s.b.Engine().(consensus.Bft); ok {
+		bft.TracingSwitch(int8(flag))
+	}
+	return ""
+}
