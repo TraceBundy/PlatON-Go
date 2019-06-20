@@ -9,10 +9,11 @@ RUN cd /PlatON-Go && make all
 # Pull Geth into a second stage deploy alpine container
 FROM alpine:latest
 
-RUN apk add --no-cache ca-certificates libstdc++ bash
+RUN apk add --no-cache ca-certificates libstdc++ bash tzdata
 COPY --from=builder /PlatON-Go/build/bin/platon /usr/local/bin/
 COPY --from=builder /PlatON-Go/build/bin/ethkey /usr/local/bin/
 COPY --from=builder /PlatON-Go/entrypoint.sh /usr/local/bin/
+RUN cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 
 ENV ENABLE_DEBUG=false
 ENV ENABLE_PPROF=false
