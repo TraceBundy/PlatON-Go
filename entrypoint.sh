@@ -38,7 +38,7 @@ fi
 
 BOOT=
 if [ "${BOOTNODES}" != "" ]; then
-	BOOT="--bootnodes ${BOOTNODES}"
+	BOOT="--bootnodesv4 ${BOOTNODES}"
 fi
 
 DISCOVER=--nodiscover
@@ -56,10 +56,22 @@ if [ "${ENABLE_CBFT_TRACING}" = "true" ]; then
 	TRACING="--cbft.breakpoint tracing"
 fi
 
+SYNCMODE_ARG=
+if [ "${SYNCMODE}" != "" ]; then
+	SYNCMODE_ARG="--syncmode ${SYNCMODE}"
+fi
+
+LIGHT_SRV=
+if [ "${ENABLE_LIGHT_SRV}" = "true" ]; then
+	LIGHT_SRV="--lightserv 10"
+	SYNCMODE_ARG=
+fi
+
 ${PLATON} --identity platon --datadir ${PLATON_HOME}/data \
 	--nodekey ${PLATON_HOME}/data/nodekey \
 	--port ${P2PPORT} ${DEBUG} --verbosity ${VERBOSITY} \
 	${PPROF} ${WS} ${RPC} \
 	--metrics --ipcdisable --txpool.nolocals \
 	--gcmode archive ${BOOT} ${DISCOVER} ${V5DISC} ${TRACING} \
-	--maxpeers ${MAXPEERS} --maxconsensuspeers ${MAXCONSENSUSPEERS}
+	--maxpeers ${MAXPEERS} --maxconsensuspeers ${MAXCONSENSUSPEERS} \
+	${SYNCMODE_ARG} ${LIGHT_SRV}
