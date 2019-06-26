@@ -333,11 +333,12 @@ func (cbft *Cbft) Start(blockChain *core.BlockChain, txPool *core.TxPool, agency
 	cbft.init()
 
 	// init wal and load wal journal
-	//if cbft.wal, err = NewWal(cbft.nodeServiceContext, ""); err != nil {
-	//	return err
-	//}
 	cbft.wal = &emptyWal{}
-	cbft.wal, _ = NewWal(cbft.nodeServiceContext, "")
+	if cbft.config.WalEnabled {
+		if cbft.wal, err = NewWal(cbft.nodeServiceContext, ""); err != nil {
+			return err
+		}
+	}
 	atomic.StoreInt32(&cbft.loading, 1)
 
 	go cbft.receiveLoop()
@@ -422,10 +423,10 @@ func (cbft *Cbft) handleMsg(info *MsgInfo) {
 	if !cbft.isRunning() {
 		switch msg.(type) {
 		case *prepareBlock,
-			*prepareBlockHash,
-			*prepareVote,
-			*viewChange,
-			*viewChangeVote:
+		*prepareBlockHash,
+		*prepareVote,
+		*viewChange,
+		*viewChangeVote:
 			cbft.log.Debug("Cbft is not running, discard consensus message")
 			return
 		}
