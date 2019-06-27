@@ -305,12 +305,14 @@ func (journal *journal) LoadJournal(fromFileID uint32, fromSeq uint64, add func(
 			} else if file.num > fromFileID {
 				err, successBytes, totalBytes = journal.loadJournal(file.num, 0, add)
 			}
-			if err == errLoadJournal && index == files.Len()-1 && successBytes+writeBufferLimitSize > totalBytes {
-				log.Warn("ignore this load journal error, ")
-				journal.rotate(0)
-				break
+			if err != nil {
+				if err == errLoadJournal && index == files.Len()-1 && successBytes+writeBufferLimitSize > totalBytes {
+					log.Warn("ignore this load journal error, ")
+					journal.rotate(0)
+					break
+				}
+				return err
 			}
-			return err
 		}
 	} else {
 		log.Error("Failed to load journal", "fromFileID", fromFileID, "fromSeq", fromSeq)
