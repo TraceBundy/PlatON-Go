@@ -243,7 +243,7 @@ func (journal *journal) rotate(journalLimitSize uint64) error {
 		// open another new journal file
 		newFileID, newWriter, err := journal.newJournalFile(journal.fileID + 1)
 		if err != nil {
-			return err
+			panic(err)
 		}
 		// update field fileID and writer
 		journal.fileID = newFileID
@@ -348,8 +348,8 @@ func (journal *journal) loadJournal(fileID uint32, seq uint64, add func(info *Ms
 		// check crc
 		_crc := crc32.Checksum(pack[10:], crc32c)
 		if crc != _crc {
-			log.Error("crc is invalid", "crc", crc, "_crc", _crc)
-			//return errLoadJournal
+			log.Error("crc is invalid", "crc", crc, "_crc", _crc, "msgType", msgType)
+			return errLoadJournal
 		}
 
 		// decode journal message
