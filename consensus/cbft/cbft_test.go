@@ -2,7 +2,6 @@ package cbft
 
 import (
 	"fmt"
-	"io/ioutil"
 	"math/big"
 	"os"
 	"testing"
@@ -1070,20 +1069,4 @@ func TestCbft_OnHighestConfirmedStatus(t *testing.T) {
 		err := engine.OnLatestStatus(peerId, v.msg)
 		assert.Nil(t, err)
 	}
-}
-
-func TestGen(t *testing.T) {
-	buf, err := ioutil.ReadFile("/home/yangzhou/platon/node1/genesis.json")
-	if err != nil {
-		t.Log(err)
-	}
-
-	var gen core.Genesis
-	err = gen.UnmarshalJSON(buf)
-	if err != nil {
-		t.Log(err)
-	}
-
-	t.Log("success")
-
 }
