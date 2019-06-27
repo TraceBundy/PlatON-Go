@@ -38,6 +38,7 @@ var crc32c = crc32.MakeTable(crc32.Castagnoli)
 var (
 	errNoActiveJournal = errors.New("no active journal")
 	errOpenNewJournal  = errors.New("Failed to open new journal file")
+	errWriteJournal     = errors.New("Failed to write journal")
 	errLoadJournal     = errors.New("Failed to load journal")
 )
 
@@ -182,11 +183,15 @@ func (journal *journal) Insert(msg *JournalMessage, sync bool) error {
 
 	n := 0
 	if n, err = journal.writer.Write(buf); (err != nil || n <= 0) {
-		return err
+		log.Error("Write data error", "err", err)
+		panic(errWriteJournal)
 	}
 	if sync {
 		// Forced to flush
-		journal.writer.Flush()
+		if err = journal.writer.Flush(); err != nil {
+			log.Error("Flush data error", "err", err)
+			panic(err)
+		}
 	}
 
 	log.Trace("Successful to insert journal message", "n", n)
