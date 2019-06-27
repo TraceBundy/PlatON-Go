@@ -290,21 +290,27 @@ func (journal *journal) ExpireJournalFile(fileID uint32) error {
 	return nil
 }
 
-func (journal *journal) LoadJournal(fromFileID uint32, fromSeq uint64, add func(info *MsgInfo)) (err error) {
+func (journal *journal) LoadJournal(fromFileID uint32, fromSeq uint64, add func(info *MsgInfo)) (error) {
 	journal.mu.Lock()
 	defer journal.mu.Unlock()
 
 	if files := listJournalFiles(journal.path); files != nil && files.Len() > 0 {
 		log.Debug("begin to load journal", "fromFileID", fromFileID, "fromSeq", fromSeq)
-		for _, file := range files {
+
+		err, successBytes, totalBytes := error(nil), int64(0), int64(0)
+
+		for index, file := range files {
 			if file.num == fromFileID {
-				err = journal.loadJournal(file.num, fromSeq, add)
+				err, successBytes, totalBytes = journal.loadJournal(file.num, fromSeq, add)
 			} else if file.num > fromFileID {
-				err = journal.loadJournal(file.num, 0, add)
+				err, successBytes, totalBytes = journal.loadJournal(file.num, 0, add)
 			}
-			if err != nil {
-				return err
+			if err == errLoadJournal && index == files.Len()-1 && successBytes+writeBufferLimitSize > totalBytes {
+				log.Warn("ignore this load journal error, ")
+				journal.rotate(0)
+				break
 			}
+			return err
 		}
 	} else {
 		log.Error("Failed to load journal", "fromFileID", fromFileID, "fromSeq", fromSeq)
@@ -313,16 +319,22 @@ func (journal *journal) LoadJournal(fromFileID uint32, fromSeq uint64, add func(
 	return nil
 }
 
-func (journal *journal) loadJournal(fileID uint32, seq uint64, add func(info *MsgInfo)) error {
+func (journal *journal) loadJournal(fileID uint32, seq uint64, add func(info *MsgInfo)) (error, int64, int64) {
 	file, err := os.Open(filepath.Join(journal.path, fmt.Sprintf("wal.%d", fileID)))
 	if err != nil {
-		return err
+		return err, 0, 0
+	}
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return err, 0, 0
 	}
 	defer file.Close()
 
+	successBytes, totalBytes := int64(0), fileInfo.Size()
 	bufReader := bufio.NewReaderSize(file, readBufferLimitSize)
 	if seq > 0 {
 		bufReader.Discard(int(seq))
+		successBytes = successBytes + int64(seq)
 	}
 
 	for {
@@ -342,6 +354,7 @@ func (journal *journal) loadJournal(fileID uint32, seq uint64, add func(info *Ms
 		}
 
 		if 0 == readNum {
+			log.Debug("load journal complete", "fileID", fileID, "fileSeq", seq, "successBytes", successBytes)
 			break
 		}
 
@@ -349,16 +362,17 @@ func (journal *journal) loadJournal(fileID uint32, seq uint64, add func(info *Ms
 		_crc := crc32.Checksum(pack[10:], crc32c)
 		if crc != _crc {
 			log.Error("crc is invalid", "crc", crc, "_crc", _crc, "msgType", msgType)
-			return errLoadJournal
+			return errLoadJournal, successBytes, totalBytes
 		}
 
 		// decode journal message
 		if msgInfo, err := WALDecode(pack[10:], msgType); err == nil {
 			add(msgInfo)
+			successBytes = successBytes + int64(totalNum)
 		} else {
 			log.Error("Failed to decode journal msg", "err", err)
-			return errLoadJournal
+			return errLoadJournal, successBytes, totalBytes
 		}
 	}
-	return nil
+	return nil, successBytes, totalBytes
 }
