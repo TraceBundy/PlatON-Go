@@ -536,7 +536,7 @@ func (cbft *Cbft) OnSyncBlock(ext *BlockExt) {
 		cbft.bp.SyncBlockBP().InvalidBlock(context.TODO(), ext, err, cbft)
 		ext.SetSyncState(err)
 	}
-	if (cbft.viewChange != nil && !cbft.viewChange.Equal(ext.view)) || !cbft.agreeViewChange() {
+	if (cbft.viewChange != nil && !cbft.viewChange.Equal(ext.view)) || !cbft.agreeViewChange() || cbft.getValidators().Len() == 1 {
 		cbft.viewChange = ext.view
 		if err := cbft.checkViewChangeVotes(ext.viewChangeVotes); err != nil {
 			cbft.viewChange = oldViewChange
