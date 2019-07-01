@@ -240,6 +240,10 @@ func (cbft *Cbft) checkViewChangeVotes(votes []*viewChangeVote) error {
 		log.Error("ViewChange is nil, check prepareVotes failed")
 		return errNotExistViewChange
 	}
+	if len(votes) < cbft.getThreshold() {
+		log.Error("lower two third viewChangeVotes")
+		return errTwoThirdViewchangeVotes
+	}
 
 	for _, vote := range votes {
 		if vote.EqualViewChange(cbft.viewChange) {
@@ -252,7 +256,20 @@ func (cbft *Cbft) checkViewChangeVotes(votes []*viewChangeVote) error {
 			return errInvalidViewChangeVote
 		}
 	}
+	return nil
+}
 
+func (cbft *Cbft) checkPrepareVotes(votes []*prepareVote) error {
+	if len(votes) < cbft.getThreshold() {
+		log.Error("lower two third prepare prepareVotes")
+		return errTwoThirdPrepareVotes
+	}
+
+	for _, vote := range votes {
+		if err := cbft.verifyValidatorSign(vote.Number, vote.ValidatorIndex, vote.ValidatorAddr, vote, vote.Signature[:]); err != nil {
+			return errInvalidPrepareVotes
+		}
+	}
 	return nil
 }
 
