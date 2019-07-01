@@ -947,6 +947,10 @@ func (cbft *Cbft) sealBlockProcess(sealedBlock *types.Block) *BlockExt {
 	current.executing = true
 	current.isExecuted = true
 	current.isSigned = true
+	current.viewChangeVotes = make([]*viewChangeVote, 0)
+	for _, v := range cbft.viewChangeVotes {
+		current.viewChangeVotes = append(current.viewChangeVotes, v)
+	}
 
 	//save the block to cbft.blockExtMap
 	cbft.saveBlockExt(sealedBlock.Hash(), current)
@@ -1149,7 +1153,6 @@ func (cbft *Cbft) flushReadyBlock() bool {
 
 	cbft.evPool.Clear(cbft.viewChange.Timestamp, cbft.viewChange.BaseBlockNum)
 	return true
-
 }
 
 // Receive prepare block from the other consensus node.
@@ -1254,7 +1257,6 @@ func (cbft *Cbft) OnNewPrepareBlock(nodeId discover.NodeID, request *prepareBloc
 				start := time.Now()
 				cbft.txPool.ForkedReset(newHeader, injectBlock)
 				cbft.bp.InternalBP().ForkedResetTxPool(bpCtx, newHeader, injectBlock, time.Now().Sub(start), cbft)
-
 			}
 
 			cbft.clearPending()
@@ -1262,6 +1264,9 @@ func (cbft *Cbft) OnNewPrepareBlock(nodeId discover.NodeID, request *prepareBloc
 		}
 		ext.view = cbft.viewChange
 		ext.viewChangeVotes = request.ViewChangeVotes
+	} else {
+		ext.view = cbft.viewChange
+		ext.viewChangeVotes = cbft.viewChangeVotes.Flatten()
 	}
 
 	switch cbft.AcceptPrepareBlock(request) {
@@ -1311,7 +1316,6 @@ func (cbft *Cbft) OnNewBlock(ext *BlockExt) error {
 
 //blockReceiver handles the new block
 func (cbft *Cbft) blockReceiver(ext *BlockExt) {
-
 	cbft.blockExtMap.Add(ext.block.Hash(), ext.block.NumberU64(), ext)
 	blocks := cbft.blockExtMap.GetSubChainUnExecuted()
 	log.Debug("Receive block", "unexecuted", len(blocks), "block map", cbft.blockExtMap.Len())
@@ -1325,7 +1329,6 @@ func (cbft *Cbft) executeBlockLoop() {
 	for {
 		select {
 		case blocks := <-cbft.innerUnExecutedBlockCh:
-
 			//execute block from small to large
 			cbft.executeBlock(blocks)
 		}
@@ -1370,7 +1373,6 @@ func (cbft *Cbft) prepareVoteReceiver(peerID discover.NodeID, vote *prepareVote)
 			cbft.handler.SendAllConsensusPeer(&confirmedPrepareBlock{Hash: ext.block.Hash(), Number: ext.block.NumberU64(), VoteBits: ext.prepareVotes.voteBits})
 		}
 	}
-
 }
 
 //Receive executed block status, remove block if status is error
