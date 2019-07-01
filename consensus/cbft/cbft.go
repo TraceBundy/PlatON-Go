@@ -59,6 +59,7 @@ var (
 	errInvalidPrepareVotes         = errors.New("invalid prepare prepareVotes")
 	errInvalidatorCandidateAddress = errors.New("invalid address")
 	errDuplicationConsensusMsg     = errors.New("duplication message")
+	errInvalidViewChange           = errors.New("invalid viewChange")
 
 	//errInvalidVrfProve = errors.New("Invalid vrf prove")
 	extraSeal = 65

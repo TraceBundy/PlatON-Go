@@ -642,6 +642,11 @@ func (cbft *Cbft) VerifyAndViewChange(view *viewChange) error {
 		return errTwoThirdPrepareVotes
 	}
 
+	if err := cbft.verifyValidatorSign(cbft.nextRoundValidator(view.BaseBlockNum), view.ProposalIndex, view.ProposalAddr, view, view.Signature[:]); err != nil {
+		cbft.log.Error("Verify viewChange signature fail", "view", view, "err", err)
+		return errInvalidViewChange
+	}
+
 	for _, vote := range view.BaseBlockPrepareVote {
 		if err := cbft.verifyValidatorSign(view.BaseBlockNum, vote.ValidatorIndex, vote.ValidatorAddr, vote, vote.Signature[:]); err != nil {
 			cbft.log.Error("Verify validator failed", "vote", vote.String(), "err", err)
