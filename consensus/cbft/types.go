@@ -602,7 +602,7 @@ func (cbft *Cbft) newViewChangeProcess(view *viewChange) {
 func (cbft *Cbft) VerifyAndViewChange(view *viewChange) error {
 
 	now := time.Now().UnixNano() / 1e6
-	if !cbft.isLegal(now, view.ProposalAddr) {
+	if !cbft.isLegal(now, view.ProposalAddr) || cbft.checkViewChangeRealTimeout(view.ProposalIndex) {
 		cbft.log.Error("Receive view change timeout", "current", now, "remote", view.Timestamp)
 		return errRecvViewTimeout
 	}
