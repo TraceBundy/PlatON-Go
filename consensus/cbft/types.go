@@ -869,6 +869,7 @@ func (pv *prepareVoteSet) Add(vote *prepareVote) {
 	pv.votes[vote.ValidatorIndex] = vote
 	pv.voteBits.setIndex(vote.ValidatorIndex, true)
 }
+
 func (pv *prepareVoteSet) Get(index uint32) *prepareVote {
 	if pv.voteBits.GetIndex(index) {
 		return pv.votes[index]
@@ -1014,14 +1015,29 @@ func (b *BlockExt) Merge(ext *BlockExt) {
 		}
 		b.prepareVotes.Merge(ext.prepareVotes)
 		// merge viewChangeVotes
-		b.viewChangeVotes = ext.viewChangeVotes
-
+		b.MergeViewChangeVotes(ext)
 		if ext.syncState != nil && b.syncState != nil {
 			panic("invalid syncState: double state channel")
 		}
 
 		if ext.syncState != nil {
 			b.syncState = ext.syncState
+		}
+	}
+}
+
+func (b *BlockExt) MergeViewChangeVotes(ext *BlockExt) {
+	if b.viewChangeVotes == nil || len(b.viewChangeVotes) == 0 {
+		b.viewChangeVotes = ext.viewChangeVotes
+	} else {
+		votes := make(map[uint32]struct{})
+		for _, v := range b.viewChangeVotes {
+			votes[v.ValidatorIndex] = struct{}{}
+		}
+		for _, v := range ext.viewChangeVotes {
+			if _, ok := votes[v.ValidatorIndex]; !ok {
+				b.viewChangeVotes = append(b.viewChangeVotes, v)
+			}
 		}
 	}
 }
