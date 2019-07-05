@@ -878,6 +878,11 @@ func (cbft *Cbft) Seal(chain consensus.ChainReader, block *types.Block, sealResu
 }
 
 func (cbft *Cbft) OnSeal(sealedBlock *types.Block, sealResultCh chan<- *types.Block, stopCh <-chan struct{}) {
+	if !(cbft.master && cbft.agreeViewChange()) {
+		cbft.log.Warn("We are not a master or view change not agreed, stop seal block", "number", sealedBlock.Number(), "parentHash", sealedBlock.ParentHash(), "state", cbft.blockState())
+		return
+	}
+
 	if (cbft.getHighestLogical() != nil && !cbft.getHighestLogical().IsParent(sealedBlock.ParentHash())) &&
 		(cbft.getHighestConfirmed() != nil && !cbft.getHighestConfirmed().IsParent(sealedBlock.ParentHash())) {
 		cbft.log.Warn("Futile block cause highest logical block changed",
