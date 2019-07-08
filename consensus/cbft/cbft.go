@@ -1961,12 +1961,37 @@ func (cbft *Cbft) HighestConfirmedBlock() *types.Block {
 
 // storeBlocks sends the blocks to cbft.cbftResultOutCh, the receiver will write them into chain
 func (cbft *Cbft) storeBlocks(blocksToStore []*BlockExt) {
+	prev := cbft.blockExtMap.head
+
 	for _, ext := range blocksToStore {
+		if cbft.getValidators().Len() > 1 && prev.number > 0 && prev.view == nil {
+			panic("previous viewChange is NIL")
+		}
+		if cbft.getValidators().Len() > 1 && prev.number > 0 && len(prev.viewChangeVotes) == 0 {
+			panic("empty viewChangeVotes")
+		}
+
+		if cbft.getValidators().Len() > 1 && prev.number > 0 && prev.prepareVotes.Votes()[0].Timestamp != prev.view.Timestamp {
+			panic("timestamp not equal")
+		}
+
+		if ext.view == nil {
+			if prev.view != nil {
+				ext.view = prev.view
+				ext.viewChangeVotes = prev.viewChangeVotes
+			}
+		} else {
+			if prev.view != nil && ext.view.Equal(prev.view) && len(ext.viewChangeVotes) == 0 {
+				ext.viewChangeVotes = prev.viewChangeVotes
+			}
+		}
+
 		extra, err := cbft.encodeExtra(ext.BlockExtra())
 		if err != nil {
 			cbft.log.Error("Encode ExtraData failed", "err", err)
 			continue
 		}
+
 		cbftResult := cbfttypes.CbftResult{
 			Block:     ext.block,
 			ExtraData: extra,
@@ -1975,6 +2000,8 @@ func (cbft *Cbft) storeBlocks(blocksToStore []*BlockExt) {
 		cbft.log.Debug("Send consensus result to worker", "block", ext.String())
 		cbft.bp.InternalBP().StoreBlock(context.TODO(), ext, cbft)
 		cbft.eventMux.Post(cbftResult)
+
+		prev = ext
 	}
 }
 
