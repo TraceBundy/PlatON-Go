@@ -262,6 +262,7 @@ func (cbft *Cbft) Start(blockChain *core.BlockChain, txPool *core.TxPool, agency
 			return err
 		}
 		current.view = extra.ViewChange
+		current.viewChangeVotes = extra.ViewChangeVotes
 
 		for _, vote := range extra.Prepare {
 			current.timestamp = vote.Timestamp
