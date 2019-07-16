@@ -2,6 +2,9 @@ package cbft
 
 import (
 	"crypto/ecdsa"
+	"sync"
+	"time"
+
 	"github.com/PlatONnetwork/PlatON-Go/common"
 	"github.com/PlatONnetwork/PlatON-Go/consensus"
 	"github.com/PlatONnetwork/PlatON-Go/core/state"
@@ -13,8 +16,6 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/p2p/discover"
 	"github.com/PlatONnetwork/PlatON-Go/params"
 	"github.com/PlatONnetwork/PlatON-Go/rpc"
-	"sync"
-	"time"
 )
 
 type Config struct {
@@ -48,6 +49,9 @@ type Cbft struct {
 
 	//Store blocks that are not committed
 	blockTree blockTree
+
+	// Validator pool
+	validatorPool *validatorPool
 }
 
 func New(sysConfig *params.CbftConfig, optConfig *OptionsConfig, eventMux *event.TypeMux, ctx *node.ServiceContext) *Cbft {
@@ -80,7 +84,7 @@ func (cbft *Cbft) Author(header *types.Header) (common.Address, error) {
 }
 
 func (cbft *Cbft) VerifyHeader(chain consensus.ChainReader, header *types.Header, seal bool) error {
-	return nil
+	return cbft.validatorPool.VerifyHeader(header)
 }
 
 func (Cbft) VerifyHeaders(chain consensus.ChainReader, headers []*types.Header, seals []bool) (chan<- struct{}, <-chan error) {
