@@ -1,4 +1,4 @@
-package cbft
+package executor
 
 import (
 	"errors"
@@ -8,20 +8,20 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/core/types"
 )
 
-type blockExecutor interface {
+type BlockExecutor interface {
 	//Execution block, you need to pass in the parent block to find the parent block state
 	execute(block *types.Block, parent *types.Block) error
 }
 
 //Block execution results, including block hash, block number, error message
-type blockExecuteStatus struct {
+type BlockExecuteStatus struct {
 	hash   common.Hash
 	number uint64
 	err    error
 }
 
-type asyncBlockExecutor interface {
-	blockExecutor
+type AsyncBlockExecutor interface {
+	BlockExecutor
 	//Asynchronous acquisition block execution results
 	executeStatus() chan<- blockExecuteStatus
 }
