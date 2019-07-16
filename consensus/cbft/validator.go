@@ -325,6 +325,13 @@ func (vp *validatorPool) GetIndexByNodeID(blockNumber uint64, nodeID discover.No
 	return vd.Index, nil
 }
 
+func (vp *validatorPool) ValidatorList(blockNumber uint64) []discover.NodeID {
+	if blockNumber <= vp.switchPoint {
+		return vp.prevValidators.NodeList()
+	}
+	return vp.currentValidators.NodeList()
+}
+
 func (vp *validatorPool) VerifyHeader(header *types.Header) error {
 	return vp.agency.VerifyHeader(header)
 }
