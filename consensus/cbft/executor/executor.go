@@ -23,7 +23,7 @@ type BlockExecuteStatus struct {
 type AsyncBlockExecutor interface {
 	BlockExecutor
 	//Asynchronous acquisition block execution results
-	executeStatus() chan<- blockExecuteStatus
+	executeStatus() chan<- BlockExecuteStatus
 }
 
 type executeTask struct {
@@ -32,12 +32,12 @@ type executeTask struct {
 }
 
 type asyncExecutor struct {
-	asyncBlockExecutor
+	AsyncBlockExecutor
 
 	executeFn consensus.Executor
 
 	executeTasks   chan *executeTask
-	executeResults chan blockExecuteStatus
+	executeResults chan BlockExecuteStatus
 
 	closed chan struct{}
 }
@@ -46,7 +46,7 @@ func NewAsyncExecutor(executeFn consensus.Executor) *asyncExecutor {
 	exe := &asyncExecutor{
 		executeFn:      executeFn,
 		executeTasks:   make(chan *executeTask, 64),
-		executeResults: make(chan blockExecuteStatus, 64),
+		executeResults: make(chan BlockExecuteStatus, 64),
 		closed:         make(chan struct{}),
 	}
 
@@ -63,7 +63,7 @@ func (exe *asyncExecutor) execute(block *types.Block, parent *types.Block) error
 	return exe.newTask(block, parent)
 }
 
-func (exe *asyncExecutor) executeStatus() chan<- blockExecuteStatus {
+func (exe *asyncExecutor) executeStatus() chan<- BlockExecuteStatus {
 	return exe.executeResults
 }
 
@@ -83,7 +83,7 @@ func (exe *asyncExecutor) loop() {
 			return
 		case task := <-exe.executeTasks:
 			err := exe.executeFn(task.block, task.parent)
-			exe.executeResults <- blockExecuteStatus{
+			exe.executeResults <- BlockExecuteStatus{
 				hash:   task.block.Hash(),
 				number: task.block.Number().Uint64(),
 				err:    err,

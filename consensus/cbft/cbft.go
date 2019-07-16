@@ -2,6 +2,7 @@ package cbft
 
 import (
 	"crypto/ecdsa"
+	"reflect"
 	"sync"
 	"time"
 
@@ -23,9 +24,6 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/p2p/discover"
 	"github.com/PlatONnetwork/PlatON-Go/params"
 	"github.com/PlatONnetwork/PlatON-Go/rpc"
-	"reflect"
-	"sync"
-	"time"
 )
 
 type Config struct {
@@ -60,9 +58,9 @@ type Cbft struct {
 
 	// Validator pool
 	validatorPool *validatorPool
+
 	//Store blocks that are not committed
 	blockTree ctypes.BlockTree
->>>>>>> consensus
 }
 
 func New(sysConfig *params.CbftConfig, optConfig *OptionsConfig, eventMux *event.TypeMux, ctx *node.ServiceContext) *Cbft {
