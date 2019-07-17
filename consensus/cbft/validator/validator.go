@@ -1,4 +1,4 @@
-package cbft
+package validator
 
 import (
 	"github.com/PlatONnetwork/PlatON-Go/common"
@@ -187,8 +187,8 @@ func (ia *InnerAgency) IsCandidateNode(nodeID discover.NodeID) bool {
 	return true
 }
 
-// validatorPool a pool storing validators.
-type validatorPool struct {
+// ValidatorPool a pool storing validators.
+type ValidatorPool struct {
 	agency consensus.Agency
 
 	// Current node's public key
@@ -201,9 +201,9 @@ type validatorPool struct {
 	currentValidators *cbfttypes.Validators // Current validators
 }
 
-// newValidatorPool new a validator pool.
-func newValidatorPool(agency consensus.Agency, blockNumber uint64, nodeID discover.NodeID) *validatorPool {
-	pool := &validatorPool{
+// NewValidatorPool new a validator pool.
+func NewValidatorPool(agency consensus.Agency, blockNumber uint64, nodeID discover.NodeID) *ValidatorPool {
+	pool := &ValidatorPool{
 		agency: agency,
 		nodeID: nodeID,
 	}
@@ -219,13 +219,13 @@ func newValidatorPool(agency consensus.Agency, blockNumber uint64, nodeID discov
 	return pool
 }
 
-// shouldSwitch check if should switch validators at the moment.
-func (vp *validatorPool) shouldSwitch(blockNumber uint64) bool {
+// ShouldSwitch check if should switch validators at the moment.
+func (vp *ValidatorPool) ShouldSwitch(blockNumber uint64) bool {
 	return blockNumber == vp.agency.GetLastNumber(blockNumber)
 }
 
-// update switch validators.
-func (vp *validatorPool) update(blockNumber uint64, eventMux *event.TypeMux) error {
+// Update switch validators.
+func (vp *ValidatorPool) Update(blockNumber uint64, eventMux *event.TypeMux) error {
 	// Only updated once
 	if blockNumber <= vp.switchPoint {
 		return nil
@@ -294,7 +294,7 @@ func (vp *validatorPool) update(blockNumber uint64, eventMux *event.TypeMux) err
 }
 
 // GetValidatorByNodeID get the validator by node id.
-func (vp *validatorPool) GetValidatorByNodeID(blockNumber uint64, nodeID discover.NodeID) (*cbfttypes.ValidateNode, error) {
+func (vp *ValidatorPool) GetValidatorByNodeID(blockNumber uint64, nodeID discover.NodeID) (*cbfttypes.ValidateNode, error) {
 	if blockNumber <= vp.switchPoint {
 		return vp.prevValidators.NodeIndex(nodeID)
 	}
@@ -302,7 +302,7 @@ func (vp *validatorPool) GetValidatorByNodeID(blockNumber uint64, nodeID discove
 }
 
 // GetValidatorByAddr get the validator by address.
-func (vp *validatorPool) GetValidatorByAddr(blockNumber uint64, addr common.Address) (*cbfttypes.ValidateNode, error) {
+func (vp *ValidatorPool) GetValidatorByAddr(blockNumber uint64, addr common.Address) (*cbfttypes.ValidateNode, error) {
 	if blockNumber <= vp.switchPoint {
 		return vp.prevValidators.AddressIndex(addr)
 	}
@@ -310,7 +310,7 @@ func (vp *validatorPool) GetValidatorByAddr(blockNumber uint64, addr common.Addr
 }
 
 // GetNodeIDByIndex get the node id by index.
-func (vp *validatorPool) GetNodeIDByIndex(blockNumber uint64, index int) discover.NodeID {
+func (vp *ValidatorPool) GetNodeIDByIndex(blockNumber uint64, index int) discover.NodeID {
 	if blockNumber <= vp.switchPoint {
 		return vp.prevValidators.NodeID(index)
 	}
@@ -318,7 +318,7 @@ func (vp *validatorPool) GetNodeIDByIndex(blockNumber uint64, index int) discove
 }
 
 // GetIndexByNodeID get the index by node id.
-func (vp *validatorPool) GetIndexByNodeID(blockNumber uint64, nodeID discover.NodeID) (int, error) {
+func (vp *ValidatorPool) GetIndexByNodeID(blockNumber uint64, nodeID discover.NodeID) (int, error) {
 	vd, err := vp.GetValidatorByNodeID(blockNumber, nodeID)
 	if err != nil {
 		return -1, err
@@ -327,7 +327,7 @@ func (vp *validatorPool) GetIndexByNodeID(blockNumber uint64, nodeID discover.No
 }
 
 // ValidatorList get the validator list.
-func (vp *validatorPool) ValidatorList(blockNumber uint64) []discover.NodeID {
+func (vp *ValidatorPool) ValidatorList(blockNumber uint64) []discover.NodeID {
 	if blockNumber <= vp.switchPoint {
 		return vp.prevValidators.NodeList()
 	}
@@ -335,18 +335,18 @@ func (vp *validatorPool) ValidatorList(blockNumber uint64) []discover.NodeID {
 }
 
 // VerifyHeader verify block's header.
-func (vp *validatorPool) VerifyHeader(header *types.Header) error {
+func (vp *ValidatorPool) VerifyHeader(header *types.Header) error {
 	return vp.agency.VerifyHeader(header)
 }
 
 // IsValidator check if the node is validator.
-func (vp *validatorPool) IsValidator(blockNumber uint64, nodeID discover.NodeID) bool {
+func (vp *ValidatorPool) IsValidator(blockNumber uint64, nodeID discover.NodeID) bool {
 	_, err := vp.GetValidatorByNodeID(blockNumber, nodeID)
 	return err == nil
 }
 
 // IsCandidateNode check if the node is candidate node.
-func (vp *validatorPool) IsCandidateNode(nodeID discover.NodeID) bool {
+func (vp *ValidatorPool) IsCandidateNode(nodeID discover.NodeID) bool {
 	return vp.agency.IsCandidateNode(nodeID)
 }
 

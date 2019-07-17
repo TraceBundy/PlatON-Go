@@ -1,4 +1,4 @@
-package cbft
+package validator
 
 import (
 	"encoding/binary"

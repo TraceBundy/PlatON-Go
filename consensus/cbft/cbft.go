@@ -10,6 +10,7 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/consensus"
 	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/evidence"
 	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/executor"
+	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/validator"
 	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/protocols"
 	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/rules"
 	cstate "github.com/PlatONnetwork/PlatON-Go/consensus/cbft/state"
@@ -57,7 +58,7 @@ type Cbft struct {
 	voteRules rules.VoteRules
 
 	// Validator pool
-	validatorPool *validatorPool
+	validatorPool *validator.ValidatorPool
 
 	//Store blocks that are not committed
 	blockTree ctypes.BlockTree
