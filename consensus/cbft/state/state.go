@@ -1,10 +1,12 @@
 package state
 
 import (
+	"sync/atomic"
+	"time"
+
 	"github.com/PlatONnetwork/PlatON-Go/common"
 	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/protocols"
 	"github.com/PlatONnetwork/PlatON-Go/core/types"
-	"sync/atomic"
 )
 
 type prepareVotes struct {
@@ -16,11 +18,19 @@ func (v *prepareVotes) Clear() {
 }
 
 type viewBlocks struct {
-	blocks map[uint32]*viewBlock
+	blocks map[uint32]ViewBlock
 }
 
 func (v *viewBlocks) Clear() {
 
+}
+
+// Newest get the newest block produced by current view.
+func (v *viewBlocks) Newest() ViewBlock {
+	if len(v.blocks) > 0 {
+		return v.blocks[uint32(len(v.blocks)-1)]
+	}
+	return nil
 }
 
 type viewVotes struct {
@@ -74,12 +84,12 @@ func (v *view) Reset() {
 }
 
 //The block of current view, there two types, prepareBlock and block
-type viewBlock interface {
-	hash() common.Hash
-	number() uint64
-	blockIndex() uint32
+type ViewBlock interface {
+	Hash() common.Hash
+	Number() uint64
+	BlockIndex() uint32
 	//If prepareBlock is an implementation of viewBlock, return prepareBlock, otherwise nil
-	prepareBlock() *protocols.PrepareBlock
+	PrepareBlock() *protocols.PrepareBlock
 }
 
 type ViewState struct {
@@ -102,6 +112,22 @@ func (vs *ViewState) ResetView(epoch uint64, viewNumber uint64) {
 	vs.view.Reset()
 	vs.view.epoch = epoch
 	vs.view.viewNumber = viewNumber
+}
+
+func (vs *ViewState) Epoch() uint64 {
+	return vs.view.epoch
+}
+
+func (vs *ViewState) ViewNumber() uint64 {
+	return vs.view.viewNumber
+}
+
+func (vs *ViewState) NewestBlock() ViewBlock {
+	return vs.view.viewBlocks.Newest()
+}
+
+func (vs *ViewState) Deadline() time.Time {
+	return vs.viewTimer.deadline
 }
 
 func (vs *ViewState) SetHighestExecutedBlock(block *types.Block) {
