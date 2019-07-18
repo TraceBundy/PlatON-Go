@@ -73,6 +73,18 @@ func (b *BlockTree) FindBlockAndQC(hash common.Hash, number uint64) (*types.Bloc
 	return nil, nil
 }
 
+// FindBlockByHash find the specified block by hash.
+func (b *BlockTree) FindBlockByHash(hash common.Hash) *types.Block {
+	for _, extMap := range b.blocks {
+		for h, ext := range extMap {
+			if h == hash {
+				return ext.block
+			}
+		}
+	}
+	return nil
+}
+
 func (b *BlockTree) pruneBranch(ext *BlockExt) {
 	for h, e := range ext.children {
 		if extMap, ok := b.blocks[e.block.NumberU64()]; ok {
