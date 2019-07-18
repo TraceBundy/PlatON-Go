@@ -236,8 +236,8 @@ func (vs *ViewState) Deadline() time.Time {
 	return vs.viewTimer.deadline
 }
 
-func (vs *ViewState) NumViewBlocks() int {
-	return vs.viewBlocks.len()
+func (vs *ViewState) NumViewBlocks() uint32 {
+	return uint32(vs.viewBlocks.len())
 }
 
 func (vs *ViewState) AddPrepareBlock(pb *protocols.PrepareBlock) {

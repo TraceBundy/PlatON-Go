@@ -217,7 +217,26 @@ func (cbft *Cbft) OnSeal(block *types.Block, results chan<- *types.Block, stop <
 		return
 	}
 
+	me, _ := cbft.validatorPool.GetValidatorByNodeID(cbft.state.HighestQCBlock().NumberU64(), cbft.config.sys.NodeID)
+
 	// TODO: seal process
+	prepareBlock := &protocols.PrepareBlock {
+		Epoch: cbft.state.Epoch(),
+		ViewNumber: cbft.state.ViewNumber(),
+		Block: block,
+		BlockIndex: cbft.state.NumViewBlocks(),
+		ProposalIndex: uint32(me.Index),
+		ProposalAddr: me.Address,
+	}
+
+	if cbft.state.NumViewBlocks() == 0 {
+	}
+
+	// TODO: add viewchange qc
+
+	// TODO: signature block
+
+	cbft.state.AddPrepareBlock(prepareBlock)
 
 	// TODO: broadcast block
 
@@ -310,7 +329,7 @@ func (cbft *Cbft) OnShouldSeal(result chan error) {
 		return
 	}
 
-	if cbft.state.NumViewBlocks() >= int(cbft.config.sys.Amount) {
+	if cbft.state.NumViewBlocks() >= cbft.config.sys.Amount {
 		result <- errors.New("produce block over limit")
 		return
 	}
