@@ -11,6 +11,7 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/consensus"
 	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/evidence"
 	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/executor"
+	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/fetcher"
 	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/protocols"
 	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/rules"
 	cstate "github.com/PlatONnetwork/PlatON-Go/consensus/cbft/state"
@@ -47,6 +48,7 @@ type Cbft struct {
 	// Async call channel
 	asyncCallCh chan func()
 
+	fetcher *fetcher.Fetcher
 	//Control the current view state
 	state cstate.ViewState
 
@@ -84,6 +86,8 @@ func New(sysConfig *params.CbftConfig, optConfig *OptionsConfig, eventMux *event
 	}
 
 	//todo init safety rules, vote rules, state, executor
+	cbft.safetyRules = rules.NewSafetyRules(&cbft.state)
+	cbft.voteRules = rules.NewVoteRules(&cbft.state)
 
 	return cbft
 }
@@ -97,7 +101,7 @@ func (cbft *Cbft) Start(chain consensus.ChainReader, executorFn consensus.Execut
 	//Initialize block tree
 	block := chain.GetBlock(chain.CurrentHeader().Hash(), chain.CurrentHeader().Number.Uint64())
 
-	cbft.blockTree.InsertBlock(block)
+	cbft.blockTree.InsertQCBlock(block, nil)
 
 	//Initialize view state
 	cbft.state.SetHighestExecutedBlock(block)
@@ -110,6 +114,10 @@ func (cbft *Cbft) Start(chain consensus.ChainReader, executorFn consensus.Execut
 
 //Receive all consensus related messages, all processing logic in the same goroutine
 func (cbft *Cbft) receiveLoop() {
+	// channel Divided into read-only type, writable type
+	// Read-only is the channel that gets the current CBFT status.
+	// Writable type is the channel that affects the consensus state
+
 	for {
 		select {
 		case msg := <-cbft.peerMsgCh:
@@ -118,7 +126,11 @@ func (cbft *Cbft) receiveLoop() {
 			cbft.handleSyncMsg(msg)
 		case fn := <-cbft.asyncCallCh:
 			fn()
+		default:
 		}
+
+		// read-only channel
+		select {}
 	}
 }
 
@@ -144,6 +156,11 @@ func (cbft *Cbft) handleConsensusMsg(info *ctypes.MsgInfo) {
 // Behind the node will be synchronized by synchronization message
 func (cbft *Cbft) handleSyncMsg(info *ctypes.MsgInfo) {
 	msg, peerID := info.Msg, info.PeerID
+
+	if cbft.fetcher.MatchTask(peerID.String(), msg) {
+		return
+	}
+
 	var err error
 	switch msg.(type) {
 	}
@@ -293,7 +310,7 @@ func (cbft *Cbft) OnShouldSeal(result chan error) {
 		return
 	}
 
-	if cbft.state.NewestBlock().BlockIndex() >= cbft.config.sys.Amount {
+	if cbft.state.NumViewBlocks() >= int(cbft.config.sys.Amount) {
 		result <- errors.New("produce block over limit")
 		return
 	}
