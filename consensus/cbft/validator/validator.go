@@ -1,6 +1,8 @@
 package validator
 
 import (
+	"sync"
+
 	"github.com/PlatONnetwork/PlatON-Go/common"
 	cvm "github.com/PlatONnetwork/PlatON-Go/common/vm"
 	"github.com/PlatONnetwork/PlatON-Go/consensus"
@@ -191,6 +193,8 @@ func (ia *InnerAgency) IsCandidateNode(nodeID discover.NodeID) bool {
 type ValidatorPool struct {
 	agency consensus.Agency
 
+	lock sync.RWMutex
+
 	// Current node's public key
 	nodeID discover.NodeID
 
@@ -199,6 +203,7 @@ type ValidatorPool struct {
 
 	prevValidators    *cbfttypes.Validators // Previous validators
 	currentValidators *cbfttypes.Validators // Current validators
+
 }
 
 // NewValidatorPool new a validator pool.
@@ -226,6 +231,9 @@ func (vp *ValidatorPool) ShouldSwitch(blockNumber uint64) bool {
 
 // Update switch validators.
 func (vp *ValidatorPool) Update(blockNumber uint64, eventMux *event.TypeMux) error {
+	vp.lock.Lock()
+	defer vp.lock.Unlock()
+
 	// Only updated once
 	if blockNumber <= vp.switchPoint {
 		return nil
@@ -295,6 +303,9 @@ func (vp *ValidatorPool) Update(blockNumber uint64, eventMux *event.TypeMux) err
 
 // GetValidatorByNodeID get the validator by node id.
 func (vp *ValidatorPool) GetValidatorByNodeID(blockNumber uint64, nodeID discover.NodeID) (*cbfttypes.ValidateNode, error) {
+	vp.lock.RLock()
+	defer vp.lock.RUnlock()
+
 	if blockNumber <= vp.switchPoint {
 		return vp.prevValidators.NodeIndex(nodeID)
 	}
@@ -303,6 +314,9 @@ func (vp *ValidatorPool) GetValidatorByNodeID(blockNumber uint64, nodeID discove
 
 // GetValidatorByAddr get the validator by address.
 func (vp *ValidatorPool) GetValidatorByAddr(blockNumber uint64, addr common.Address) (*cbfttypes.ValidateNode, error) {
+	vp.lock.RLock()
+	defer vp.lock.RUnlock()
+
 	if blockNumber <= vp.switchPoint {
 		return vp.prevValidators.AddressIndex(addr)
 	}
@@ -311,6 +325,9 @@ func (vp *ValidatorPool) GetValidatorByAddr(blockNumber uint64, addr common.Addr
 
 // GetNodeIDByIndex get the node id by index.
 func (vp *ValidatorPool) GetNodeIDByIndex(blockNumber uint64, index int) discover.NodeID {
+	vp.lock.RLock()
+	defer vp.lock.RUnlock()
+
 	if blockNumber <= vp.switchPoint {
 		return vp.prevValidators.NodeID(index)
 	}
@@ -328,6 +345,9 @@ func (vp *ValidatorPool) GetIndexByNodeID(blockNumber uint64, nodeID discover.No
 
 // ValidatorList get the validator list.
 func (vp *ValidatorPool) ValidatorList(blockNumber uint64) []discover.NodeID {
+	vp.lock.RLock()
+	defer vp.lock.RUnlock()
+
 	if blockNumber <= vp.switchPoint {
 		return vp.prevValidators.NodeList()
 	}
@@ -352,6 +372,9 @@ func (vp *ValidatorPool) IsCandidateNode(nodeID discover.NodeID) bool {
 
 // Len return number of validators.
 func (vp *ValidatorPool) Len(blockNumber uint64) int {
+	vp.lock.RLock()
+	defer vp.lock.RUnlock()
+
 	if blockNumber <= vp.switchPoint {
 		return vp.prevValidators.Len()
 	}
