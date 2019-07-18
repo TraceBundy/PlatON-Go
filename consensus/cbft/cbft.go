@@ -17,6 +17,7 @@ import (
 	cstate "github.com/PlatONnetwork/PlatON-Go/consensus/cbft/state"
 	ctypes "github.com/PlatONnetwork/PlatON-Go/consensus/cbft/types"
 	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/validator"
+	"github.com/PlatONnetwork/PlatON-Go/core/cbfttypes"
 	"github.com/PlatONnetwork/PlatON-Go/core/state"
 	"github.com/PlatONnetwork/PlatON-Go/core/types"
 	"github.com/PlatONnetwork/PlatON-Go/event"
@@ -27,6 +28,8 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/params"
 	"github.com/PlatONnetwork/PlatON-Go/rpc"
 )
+
+const cbftVersion = 1
 
 type Config struct {
 	sys    *params.CbftConfig
@@ -219,17 +222,22 @@ func (cbft *Cbft) OnSeal(block *types.Block, results chan<- *types.Block, stop <
 
 	me, _ := cbft.validatorPool.GetValidatorByNodeID(cbft.state.HighestQCBlock().NumberU64(), cbft.config.sys.NodeID)
 
-	// TODO: seal process
-	prepareBlock := &protocols.PrepareBlock {
-		Epoch: cbft.state.Epoch(),
-		ViewNumber: cbft.state.ViewNumber(),
-		Block: block,
-		BlockIndex: cbft.state.NumViewBlocks(),
+	prepareBlock := &protocols.PrepareBlock{
+		Epoch:         cbft.state.Epoch(),
+		ViewNumber:    cbft.state.ViewNumber(),
+		Block:         block,
+		BlockIndex:    cbft.state.NumViewBlocks(),
 		ProposalIndex: uint32(me.Index),
-		ProposalAddr: me.Address,
+		ProposalAddr:  me.Address,
 	}
 
 	if cbft.state.NumViewBlocks() == 0 {
+		parentBlock, parentQC := cbft.blockTree.FindBlockAndQC(block.ParentHash(), block.NumberU64()-1)
+		if parentBlock == nil {
+			cbft.log.Error("Can not find parent block", "number", block.Number(), "parentHash", block.ParentHash())
+			return
+		}
+		prepareBlock.PrepareQC = parentQC
 	}
 
 	// TODO: add viewchange qc
@@ -237,6 +245,18 @@ func (cbft *Cbft) OnSeal(block *types.Block, results chan<- *types.Block, stop <
 	// TODO: signature block
 
 	cbft.state.AddPrepareBlock(prepareBlock)
+	cbft.state.SetHighestExecutedBlock(block)
+
+	// TODO: single node process
+	if cbft.validatorPool.Len(cbft.state.HighestQCBlock().NumberU64()) == 1 {
+		cbft.state.SetHighestQCBlock(block)
+		cbft.state.SetHighestLockBlock(block)
+
+		// TODO: signature prepare qc
+		var qc ctypes.QuorumCert
+		cbft.commitBlock(block, &qc)
+		cbft.state.SetHighestCommitBlock(block)
+	}
 
 	// TODO: broadcast block
 
@@ -393,3 +413,17 @@ func (cbft *Cbft) Config() *Config {
 	return nil
 }
 
+func (cbft *Cbft) commitBlock(block *types.Block, qc *ctypes.QuorumCert) {
+	extra, err := ctypes.EncodeExtra(byte(cbftVersion), qc)
+	if err != nil {
+		cbft.log.Error("Encode extra error", "nubmer", block.Number(), "hash", block.Hash(), "cbftVersion", cbftVersion)
+		return
+	}
+
+	cbft.log.Debug("Send consensus result to worker", "number", block.Number(), "hash", block.Hash())
+	cbft.eventMux.Post(cbfttypes.CbftResult{
+		Block:     block,
+		ExtraData: extra,
+		SyncState: nil,
+	})
+}
