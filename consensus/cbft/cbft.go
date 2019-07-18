@@ -44,8 +44,8 @@ type Cbft struct {
 	evPool     evidence.EvidencePool
 	log        log.Logger
 
-	// Notify `ShouldSeal` event
-	shouldSealCh chan chan error
+	// Async call channel
+	asyncCallCh chan func()
 
 	//Control the current view state
 	state cstate.ViewState
@@ -68,13 +68,13 @@ type Cbft struct {
 
 func New(sysConfig *params.CbftConfig, optConfig *OptionsConfig, eventMux *event.TypeMux, ctx *node.ServiceContext) *Cbft {
 	cbft := &Cbft{
-		config:       Config{sysConfig, optConfig},
-		eventMux:     eventMux,
-		exitCh:       make(chan struct{}),
-		peerMsgCh:    make(chan *ctypes.MsgInfo, optConfig.PeerMsgQueueSize),
-		syncMsgCh:    make(chan *ctypes.MsgInfo, optConfig.PeerMsgQueueSize),
-		log:          log.New(),
-		shouldSealCh: make(chan chan error, optConfig.PeerMsgQueueSize),
+		config:      Config{sysConfig, optConfig},
+		eventMux:    eventMux,
+		exitCh:      make(chan struct{}),
+		peerMsgCh:   make(chan *ctypes.MsgInfo, optConfig.PeerMsgQueueSize),
+		syncMsgCh:   make(chan *ctypes.MsgInfo, optConfig.PeerMsgQueueSize),
+		log:         log.New(),
+		asyncCallCh: make(chan func(), optConfig.PeerMsgQueueSize),
 	}
 
 	if evPool, err := evidence.NewEvidencePool(); err == nil {
@@ -116,8 +116,8 @@ func (cbft *Cbft) receiveLoop() {
 			cbft.handleConsensusMsg(msg)
 		case msg := <-cbft.syncMsgCh:
 			cbft.handleSyncMsg(msg)
-		case result := <-cbft.shouldSealCh:
-			cbft.OnShouldSeal(result)
+		case fn := <-cbft.asyncCallCh:
+			fn()
 		}
 	}
 }
@@ -178,8 +178,41 @@ func (Cbft) Finalize(chain consensus.ChainReader, header *types.Header, state *s
 	panic("implement me")
 }
 
-func (Cbft) Seal(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
-	panic("implement me")
+func (cbft *Cbft) Seal(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
+	cbft.log.Info("Seal block", "number", block.Number(), "parentHash", block.ParentHash())
+	if block.NumberU64() == 0 {
+		return errors.New("unknow block")
+	}
+
+	// TODO signature block
+
+	cbft.asyncCallCh <- func() {
+		cbft.OnSeal(block, results, stop)
+	}
+	return nil
+}
+
+func (cbft *Cbft) OnSeal(block *types.Block, results chan<- *types.Block, stop <-chan struct{}) {
+	// TODO: check is turn to seal block
+
+	if cbft.state.HighestExecutedBlock().Hash() != block.ParentHash() {
+		cbft.log.Warn("Futile block cause highest executed block changed", "nubmer", block.Number(), "parentHash", block.ParentHash())
+		return
+	}
+
+	// TODO: seal process
+
+	// TODO: broadcast block
+
+	go func() {
+		select {
+		case <-stop:
+			return
+		case results <- block:
+		default:
+			cbft.log.Warn("Sealing result channel is not ready by miner", "sealHash", block.Header().SealHash())
+		}
+	}()
 }
 
 func (Cbft) SealHash(header *types.Header) common.Hash {
@@ -233,7 +266,10 @@ func (Cbft) ConsensusNodes() ([]discover.NodeID, error) {
 // ShouldSeal check if we can seal block.
 func (cbft *Cbft) ShouldSeal(curTime time.Time) (bool, error) {
 	result := make(chan error, 1)
-	cbft.shouldSealCh <- result
+	// FIXME: should use independent channel?
+	cbft.asyncCallCh <- func() {
+		cbft.OnShouldSeal(result)
+	}
 	select {
 	case err := <-result:
 		return err == nil, err
@@ -243,16 +279,6 @@ func (cbft *Cbft) ShouldSeal(curTime time.Time) (bool, error) {
 }
 
 func (cbft *Cbft) OnShouldSeal(result chan error) {
-	if len(cbft.shouldSealCh) > 0 {
-		for {
-			select {
-			case result = <-cbft.shouldSealCh:
-			default:
-				break
-			}
-		}
-	}
-
 	currentExecutedBlockNumber := cbft.state.HighestExecutedBlock().NumberU64()
 	if !cbft.validatorPool.IsValidator(currentExecutedBlockNumber, cbft.config.sys.NodeID) {
 		result <- errors.New("current node not a validator")
@@ -275,6 +301,7 @@ func (cbft *Cbft) OnShouldSeal(result chan error) {
 }
 
 func (cbft *Cbft) CalcBlockDeadline(timePoint time.Time) time.Time {
+	// FIXME: condition race
 	produceInterval := time.Duration(cbft.config.sys.Period/uint64(cbft.config.sys.Amount)) * time.Millisecond
 	if cbft.state.Deadline().Sub(timePoint) > produceInterval {
 		return timePoint.Add(produceInterval)
@@ -283,6 +310,7 @@ func (cbft *Cbft) CalcBlockDeadline(timePoint time.Time) time.Time {
 }
 
 func (cbft *Cbft) CalcNextBlockTime(blockTime time.Time) time.Time {
+	// FIXME: condition race
 	produceInterval := time.Duration(cbft.config.sys.Period/uint64(cbft.config.sys.Amount)) * time.Millisecond
 	if time.Now().Sub(blockTime) < produceInterval {
 		// TODO: add network latency
