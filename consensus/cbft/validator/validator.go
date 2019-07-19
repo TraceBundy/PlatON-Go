@@ -406,13 +406,17 @@ func (vp *ValidatorPool) Verify(blockNumber uint64, validatorIndex uint32, msg, 
 }
 
 // VerifyAggSig verify aggregation signature.
-func (vp *ValidatorPool) VerifyAggSig(blockNumber uint64, validatorIndexs []uint32, msg, signature []byte) bool {
+func (vp *ValidatorPool) VerifyAggSig(blockNumber uint64, validatorIndexes []uint32, msg, signature []byte) bool {
 	vp.lock.RLock()
 	validators := vp.currentValidators
 	if blockNumber <= vp.switchPoint {
 		validators = vp.prevValidators
 	}
 	validators.Len()
+
+	// TODO: get the node list specified by `validatorIndexes`
+	// TODO: aggregation the node's public key
+	// TODO: use aggregation public key to verify signature
 
 	return true
 }
