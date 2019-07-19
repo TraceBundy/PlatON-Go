@@ -40,7 +40,7 @@ func (pk *PrivateKey) Bytes() []byte {
 }
 
 // Add add a private key to aggregate.
-func (pk *Add) Add(rhs *PrivateKey) {
+func (pk *PrivateKey) Add(rhs *PrivateKey) {
 }
 
 // Recover generates a public key from hex string.
@@ -59,8 +59,7 @@ func (pk *PublicKey) Bytes() []byte {
 }
 
 // Add add a public key to aggregate.
-func (pk *PublicKey) Add() {
-
+func (pk *PublicKey) Add(rhs *PublicKey) {
 }
 
 // Equal returns a boolean reporting whether pk and rhs are the same.
@@ -70,6 +69,7 @@ func (pk *PublicKey) Equal(rhs *PublicKey) bool {
 
 // Recover recover a signature from hex string.
 func (sig *Signature) Recover(s string) error {
+	return nil
 }
 
 // Verify verifies the signature using the public key. Its return

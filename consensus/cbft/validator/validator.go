@@ -6,6 +6,7 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/common"
 	cvm "github.com/PlatONnetwork/PlatON-Go/common/vm"
 	"github.com/PlatONnetwork/PlatON-Go/consensus"
+	mycrypto "github.com/PlatONnetwork/PlatON-Go/consensus/cbft/crypto"
 	"github.com/PlatONnetwork/PlatON-Go/core"
 	"github.com/PlatONnetwork/PlatON-Go/core/cbfttypes"
 	"github.com/PlatONnetwork/PlatON-Go/core/types"
@@ -401,7 +402,6 @@ func (vp *ValidatorPool) Verify(blockNumber uint64, validatorIndex uint32, msg, 
 	if err != nil {
 		return false
 	}
-	// TODO: use new verify alg
 	return validator.Verify(msg, signature)
 }
 
@@ -412,13 +412,24 @@ func (vp *ValidatorPool) VerifyAggSig(blockNumber uint64, validatorIndexes []uin
 	if blockNumber <= vp.switchPoint {
 		validators = vp.prevValidators
 	}
-	validators.Len()
 
-	// TODO: get the node list specified by `validatorIndexes`
-	// TODO: aggregation the node's public key
-	// TODO: use aggregation public key to verify signature
+	nodeList, err := validators.NodeListByIndexes(validatorIndexes)
+	if err != nil {
+		return false
+	}
+	vp.lock.RUnlock()
 
-	return true
+	pub := &mycrypto.PublicKey{}
+	for _, node := range nodeList {
+		pub.Add(node.AggPubKey)
+	}
+
+	sig := &mycrypto.Signature{}
+	err = sig.Recover(string(signature))
+	if err != nil {
+		return false
+	}
+	return sig.Verify(pub, string(msg))
 }
 
 func nextRound(blockNumber uint64) uint64 {

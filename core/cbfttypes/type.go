@@ -3,15 +3,13 @@ package cbfttypes
 import (
 	"bytes"
 	"crypto/ecdsa"
-	"crypto/elliptic"
 	"errors"
 	"fmt"
 	"math/big"
 	"sort"
 
-	"github.com/PlatONnetwork/PlatON-Go/crypto"
-
 	"github.com/PlatONnetwork/PlatON-Go/common"
+	mycrypto "github.com/PlatONnetwork/PlatON-Go/consensus/cbft/crypto"
 	"github.com/PlatONnetwork/PlatON-Go/core/types"
 	"github.com/PlatONnetwork/PlatON-Go/p2p/discover"
 )
@@ -73,10 +71,11 @@ type RemoveValidatorEvent struct {
 type UpdateValidatorEvent struct{}
 
 type ValidateNode struct {
-	Index   int            `json:"index"`
-	Address common.Address `json:"-"`
-	PubKey  *ecdsa.PublicKey
-	NodeID discover.NodeID
+	Index     int            `json:"index"`
+	Address   common.Address `json:"-"`
+	PubKey    *ecdsa.PublicKey
+	NodeID    discover.NodeID
+	AggPubKey *mycrypto.PublicKey
 }
 
 type ValidateNodeMap map[discover.NodeID]*ValidateNode
@@ -99,16 +98,13 @@ func (vn *ValidateNode) String() string {
 }
 
 func (vn *ValidateNode) Verify(data, sign []byte) bool {
-	recPubKey, err := crypto.Ecrecover(data, sign)
+	sig := &mycrypto.Signature{}
+	err := sig.Recover(string(sign))
 	if err != nil {
 		return false
 	}
 
-	pbytes := elliptic.Marshal(vn.PubKey.Curve, vn.PubKey.X, vn.PubKey.Y)
-	if !bytes.Equal(pbytes, recPubKey) {
-		return false
-	}
-	return true
+	return sig.Verify(vn.AggPubKey, string(data))
 }
 
 func (vnm ValidateNodeMap) String() string {
@@ -131,6 +127,20 @@ func (vs *Validators) NodeList() []discover.NodeID {
 	return nodeList
 }
 
+func (vs *Validators) NodeListByIndexes(indexes []uint32) ([]*ValidateNode, error) {
+	if len(vs.sortedNodes) == 0 {
+		vs.sort()
+	}
+	l := make([]*ValidateNode, 0)
+	for _, index := range indexes {
+		if int(index) >= len(vs.sortedNodes) {
+			return nil, errors.New("invalid index")
+		}
+		l = append(l, vs.sortedNodes[int(index)])
+	}
+	return l, nil
+}
+
 func (vs *Validators) FindNodeByID(id discover.NodeID) (*ValidateNode, error) {
 	node, ok := vs.Nodes[id]
 	if ok {
@@ -140,7 +150,7 @@ func (vs *Validators) FindNodeByID(id discover.NodeID) (*ValidateNode, error) {
 }
 
 func (vs *Validators) FindNodeByIndex(index int) (*ValidateNode, error) {
-	if len(vs.sortedNodes) == 0{
+	if len(vs.sortedNodes) == 0 {
 		vs.sort()
 	}
 	if index >= len(vs.sortedNodes) {
@@ -160,7 +170,7 @@ func (vs *Validators) FindNodeByAddress(addr common.Address) (*ValidateNode, err
 }
 
 func (vs *Validators) NodeID(idx int) discover.NodeID {
-	if len(vs.sortedNodes) == 0{
+	if len(vs.sortedNodes) == 0 {
 		vs.sort()
 	}
 	if idx >= vs.sortedNodes.Len() {
