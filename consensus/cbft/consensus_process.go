@@ -2,6 +2,7 @@ package cbft
 
 import (
 	"fmt"
+
 	"github.com/PlatONnetwork/PlatON-Go/common"
 	"github.com/PlatONnetwork/PlatON-Go/common/math"
 	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/executor"
@@ -46,7 +47,7 @@ func (cbft *Cbft) OnPrepareVote(id string, msg *protocols.PrepareVote) error {
 func (cbft *Cbft) OnViewChange(id string, msg *protocols.ViewChange) error {
 	if err := cbft.safetyRules.ViewChangeRules(msg); err != nil {
 		if err.Fetch() {
-			cbft.fetchBlock(id, msg.BlockHash, msg.BlockNum)
+			cbft.fetchBlock(id, msg.BlockHash, msg.BlockNumber)
 		}
 	}
 
@@ -105,7 +106,7 @@ func (cbft *Cbft) sendPrepareVote() {
 		if err := cbft.voteRules.AllowVote(p); err != nil {
 			break
 		}
-    
+
 		block := cbft.state.ViewBlockByIndex(p.BlockIndex)
 		if b, qc := cbft.blockTree.FindBlockAndQC(block.ParentHash(), block.NumberU64()-1); b != nil {
 			p.ParentQC = qc

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"encoding/json"
-
 	"errors"
 	"reflect"
 	"sync"
@@ -16,6 +15,7 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/executor"
 	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/fetcher"
 	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/protocols"
+	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/router"
 	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/rules"
 	cstate "github.com/PlatONnetwork/PlatON-Go/consensus/cbft/state"
 	ctypes "github.com/PlatONnetwork/PlatON-Go/consensus/cbft/types"
@@ -80,6 +80,10 @@ type Cbft struct {
 	wal                wal.Wal
 	stateMu            sync.Mutex
 	viewMu             sync.Mutex
+
+	// processing message
+	handler *EngineManager
+	routing Router
 }
 
 func New(sysConfig *params.CbftConfig, optConfig *OptionsConfig, eventMux *event.TypeMux, ctx *node.ServiceContext) *Cbft {
@@ -104,7 +108,17 @@ func New(sysConfig *params.CbftConfig, optConfig *OptionsConfig, eventMux *event
 	cbft.safetyRules = rules.NewSafetyRules(&cbft.state)
 	cbft.voteRules = rules.NewVoteRules(&cbft.state)
 
+	// init handler and router to process message.
+	// cbft -> handler -> router.
+	cbft.handler = NewEngineManger(cbft)                // init engineManager as handler.
+	cbft.routing = router.NewRouter(cbft, cbft.handler) // init router to distribute message.
+
 	return cbft
+}
+
+// Returns the ID value of the current node
+func (cbft *Cbft) NodeId() discover.NodeID {
+	return discover.NodeID{}
 }
 
 func (cbft *Cbft) Start(chain consensus.ChainReader, blockCacheWriter consensus.BlockCacheWriter, txPool consensus.TxPoolReset, agency consensus.Agency) error {
@@ -130,6 +144,10 @@ func (cbft *Cbft) Start(chain consensus.ChainReader, blockCacheWriter consensus.
 	}
 
 	go cbft.receiveLoop()
+
+	// Start the handler to process the message.
+	go cbft.handler.Start()
+
 	return nil
 }
 
@@ -140,6 +158,19 @@ func (cbft *Cbft) ReceiveMessage(msg *ctypes.MsgInfo) {
 	select {
 	case cbft.peerMsgCh <- msg:
 		cbft.log.Debug("Received message from peer", "peer", msg.PeerID, "msgType", reflect.TypeOf(msg.Msg), "msgHash", msg.Msg.MsgHash().TerminalString(), "BHash", msg.Msg.BHash().TerminalString())
+	case <-cbft.exitCh:
+		cbft.log.Error("Cbft exit")
+	}
+}
+
+// ReceiveSyncMsg is used to receive messages that are synchronized from other nodes.
+//
+// Possible message types are:
+//  PrepareBlockVotesMsg/GetLatestStatusMsg/LatestStatusMsg/
+func (cbft *Cbft) ReceiveSyncMsg(msg *ctypes.MsgInfo) {
+	select {
+	case cbft.syncMsgCh <- msg:
+		cbft.log.Debug("Receive synchronization related messages from peer", "peer", msg.PeerID, "msgType", reflect.TypeOf(msg.Msg), "msgHash", msg.Msg.MsgHash().TerminalString(), "BHash", msg.Msg.BHash().TerminalString())
 	case <-cbft.exitCh:
 		cbft.log.Error("Cbft exit")
 	}
@@ -168,18 +199,19 @@ func (cbft *Cbft) LoadWal() error {
 func (cbft *Cbft) receiveLoop() {
 	// channel Divided into read-only type, writable type
 	// Read-only is the channel that gets the current CBFT status.
-	// Writable type is the channel that affects the consensus state
-
+	// Writable type is the channel that affects the consensus state.
 	for {
 		select {
 		case msg := <-cbft.peerMsgCh:
 			cbft.handleConsensusMsg(msg)
+
 		case msg := <-cbft.syncMsgCh:
 			cbft.handleSyncMsg(msg)
 		case msg := <-cbft.asyncExecutor.ExecuteStatus():
 			cbft.onAsyncExecuteStatus(msg)
 		case fn := <-cbft.asyncCallCh:
 			fn()
+
 		default:
 		}
 
@@ -528,6 +560,21 @@ func (cbft *Cbft) OnPong(nodeID discover.NodeID, netLatency int64) error {
 func (cbft *Cbft) Config() *Config {
 	panic("need to be improved")
 	return nil
+}
+
+// Return the highest submitted block number of the current node.
+func (cbft *Cbft) HighestCommitBlockBn() uint64 {
+	return cbft.state.HighestQCBlock().NumberU64()
+}
+
+// Return the highest locked block number of the current node.
+func (cbft *Cbft) HighestLockBlockBn() uint64 {
+	return cbft.state.HighestLockBlock().NumberU64()
+}
+
+// Return the highest QC block number of the current node.
+func (cbft *Cbft) HighestQCBlockBn() uint64 {
+	return cbft.state.HighestQCBlock().NumberU64()
 }
 
 func (cbft *Cbft) commitBlock(block *types.Block, qc *ctypes.QuorumCert) {
