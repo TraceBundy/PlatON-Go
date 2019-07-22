@@ -18,7 +18,6 @@ package state
 
 import (
 	"fmt"
-	"github.com/PlatONnetwork/PlatON-Go/log"
 	"sync"
 
 	"github.com/PlatONnetwork/PlatON-Go/common"
@@ -100,16 +99,11 @@ func (db *cachingDB) OpenTrie(root common.Hash) (Trie, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	log.Debug("------database OpenTrie------", "GoRoutineID", common.CurrentGoRoutineID(), "root", root)
 	for i := len(db.pastTries) - 1; i >= 0; i-- {
 		if db.pastTries[i].Hash() == root {
-			log.Debug("------database OpenTrie pastTries----", "GoRoutineID", common.CurrentGoRoutineID(), "root", root)
 			return cachedTrie{db.pastTries[i].Copy(), db}, nil
 		}
 	}
-
-	log.Debug("------database OpenTrie new trie------", "GoRoutineID", common.CurrentGoRoutineID(), "root", root)
-
 	tr, err := trie.NewSecure(root, db.db, MaxTrieCacheGen)
 	if err != nil {
 		return nil, err

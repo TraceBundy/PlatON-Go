@@ -37,17 +37,14 @@ const (
 	// AddressLength is the expected length of the address
 	AddressLength          = 20
 	BlockConfirmSignLength = 65
+	ExtraSeal = 65
 )
 
 var (
 	hashT    = reflect.TypeOf(Hash{})
 	addressT = reflect.TypeOf(Address{})
 
-
-
-	RewardPoolAddr    = HexToAddress("0x1000000000000000000000000000000000000000")
-	CandidatePoolAddr = HexToAddress("0x1000000000000000000000000000000000000001")
-	TicketPoolAddr    = HexToAddress("0x1000000000000000000000000000000000000002")
+	ZeroHash 		  = HexToHash(Hash{}.String())
 	ZeroAddr          = HexToAddress(Address{}.String())
 )
 
@@ -380,6 +377,31 @@ type BlockConfirmSign [BlockConfirmSignLength]byte
 
 func (sig *BlockConfirmSign) String() string {
 	return fmt.Sprintf("%x", sig[:])
+}
+
+func (sig *BlockConfirmSign) SetBytes(signSlice []byte) {
+	copy(sig[:], signSlice[:])
+}
+
+func (sig *BlockConfirmSign) Bytes() []byte {
+	target := make([]byte, len(sig))
+	copy(target[:], sig[:])
+	return target
+}
+
+// MarshalText returns the hex representation of a.
+func (a BlockConfirmSign) MarshalText() ([]byte, error) {
+	return hexutil.Bytes(a[:]).MarshalText()
+}
+
+// UnmarshalText parses a hash in hex syntax.
+func (a *BlockConfirmSign) UnmarshalText(input []byte) error {
+	return hexutil.UnmarshalFixedText("BlockConfirmSign", input, a[:])
+}
+
+// UnmarshalJSON parses a hash in hex syntax.
+func (a *BlockConfirmSign) UnmarshalJSON(input []byte) error {
+	return hexutil.UnmarshalFixedJSON(addressT, input, a[:])
 }
 
 func NewBlockConfirmSign(signSlice []byte) *BlockConfirmSign {

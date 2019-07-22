@@ -17,14 +17,13 @@
 package miner
 
 import (
+	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft"
 	"math/big"
 	"testing"
 	"time"
 
 	"github.com/PlatONnetwork/PlatON-Go/common"
 	"github.com/PlatONnetwork/PlatON-Go/consensus"
-	"github.com/PlatONnetwork/PlatON-Go/consensus/clique"
-	"github.com/PlatONnetwork/PlatON-Go/consensus/ethash"
 	"github.com/PlatONnetwork/PlatON-Go/core"
 	"github.com/PlatONnetwork/PlatON-Go/core/types"
 	"github.com/PlatONnetwork/PlatON-Go/core/vm"
@@ -37,7 +36,6 @@ import (
 var (
 	// Test chain configurations
 	testTxPoolConfig  core.TxPoolConfig
-	ethashChainConfig *params.ChainConfig
 	cliqueChainConfig *params.ChainConfig
 
 	// Test accounts
@@ -56,15 +54,14 @@ var (
 func init() {
 	testTxPoolConfig = core.DefaultTxPoolConfig
 	testTxPoolConfig.Journal = ""
-	ethashChainConfig = params.TestChainConfig
 	cliqueChainConfig = params.TestChainConfig
 	cliqueChainConfig.Clique = &params.CliqueConfig{
 		Period: 10,
 		Epoch:  30000,
 	}
-	tx1, _ := types.SignTx(types.NewTransaction(0, testUserAddress, big.NewInt(1000), params.TxGas, nil, nil), types.HomesteadSigner{}, testBankKey)
+	tx1, _ := types.SignTx(types.NewTransaction(0, testUserAddress, big.NewInt(1000), params.TxGas, nil, nil), types.NewEIP155Signer(new(big.Int)), testBankKey)
 	pendingTxs = append(pendingTxs, tx1)
-	tx2, _ := types.SignTx(types.NewTransaction(1, testUserAddress, big.NewInt(1000), params.TxGas, nil, nil), types.HomesteadSigner{}, testBankKey)
+	tx2, _ := types.SignTx(types.NewTransaction(1, testUserAddress, big.NewInt(1000), params.TxGas, nil, nil), types.NewEIP155Signer(new(big.Int)), testBankKey)
 	newTxs = append(newTxs, tx2)
 }
 
@@ -74,7 +71,6 @@ type testWorkerBackend struct {
 	txPool     *core.TxPool
 	chain      *core.BlockChain
 	testTxFeed event.Feed
-	uncleBlock *types.Block
 }
 
 func newTestWorkerBackend(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine, n int) *testWorkerBackend {
@@ -87,17 +83,18 @@ func newTestWorkerBackend(t *testing.T, chainConfig *params.ChainConfig, engine 
 	)
 
 	switch engine.(type) {
-	case *clique.Clique:
+	case *cbft.Cbft:
 		gspec.ExtraData = make([]byte, 32+common.AddressLength+65)
 		copy(gspec.ExtraData[32:], testBankAddress[:])
-	case *ethash.Ethash:
 	default:
 		t.Fatalf("unexpected consensus engine type: %T", engine)
 	}
 	genesis := gspec.MustCommit(db)
 
 	chain, _ := core.NewBlockChain(db, nil, gspec.Config, engine, vm.Config{}, nil)
-	txpool := core.NewTxPool(testTxPoolConfig, chainConfig, chain)
+	blockChainCache := core.NewBlockChainCache(chain)
+
+	txpool := core.NewTxPool(testTxPoolConfig, chainConfig, blockChainCache)
 
 	// Generate a small n-block chain and an uncle block for it
 	if n > 0 {
@@ -112,15 +109,14 @@ func newTestWorkerBackend(t *testing.T, chainConfig *params.ChainConfig, engine 
 	if n > 0 {
 		parent = chain.GetBlockByHash(chain.CurrentBlock().ParentHash())
 	}
-	blocks, _ := core.GenerateChain(chainConfig, parent, engine, db, 1, func(i int, gen *core.BlockGen) {
+	core.GenerateChain(chainConfig, parent, engine, db, 1, func(i int, gen *core.BlockGen) {
 		gen.SetCoinbase(testUserAddress)
 	})
 
 	return &testWorkerBackend{
-		db:         db,
-		chain:      chain,
-		txPool:     txpool,
-		uncleBlock: blocks[0],
+		db:     db,
+		chain:  chain,
+		txPool: txpool,
 	}
 }
 
@@ -130,25 +126,39 @@ func (b *testWorkerBackend) PostChainEvents(events []interface{}) {
 	b.chain.PostChainEvents(events, nil)
 }
 
-func newTestWorker(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine, blocks int) (*worker, *testWorkerBackend) {
+func newTestWorker(t *testing.T, chainConfig *params.ChainConfig, miningConfig *core.MiningConfig, engine consensus.Engine, blocks int) (*worker, *testWorkerBackend) {
 	backend := newTestWorkerBackend(t, chainConfig, engine, blocks)
 	backend.txPool.AddLocals(pendingTxs)
-	w := newWorker(chainConfig, engine, backend, new(event.TypeMux), time.Second, params.GenesisGasLimit, params.GenesisGasLimit, nil)
+	w := newWorker(chainConfig, miningConfig, engine, backend, new(event.TypeMux), time.Second, params.GenesisGasLimit, params.GenesisGasLimit, nil, nil)
 	w.setEtherbase(testBankAddress)
 	return w, backend
 }
 
-func TestPendingStateAndBlockEthash(t *testing.T) {
-	testPendingStateAndBlock(t, ethashChainConfig, ethash.NewFaker())
+/*
+func TestPendingStateAndBlockCbft(t *testing.T) {
+	testPendingStateAndBlock(t, ethashChainConfig, cbft.NewFaker())
 }
-func TestPendingStateAndBlockClique(t *testing.T) {
-	testPendingStateAndBlock(t, cliqueChainConfig, clique.New(cliqueChainConfig.Clique, ethdb.NewMemDatabase()))
-}
-
+*/
 func testPendingStateAndBlock(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine) {
 	defer engine.Close()
 
-	w, b := newTestWorker(t, chainConfig, engine, 0)
+	minningConfig := &core.MiningConfig{
+		MiningLogAtDepth: 		7,
+		TxChanSize: 			4096,
+		ChainHeadChanSize: 		10,
+		ChainSideChanSize:		10,
+		ResultQueueSize:		10,
+		ResubmitAdjustChanSize: 10,
+		MinRecommitInterval:	1 * time.Second,
+		MaxRecommitInterval:	15 * time.Second,
+		IntervalAdjustRatio:	0.1,
+		IntervalAdjustBias:		200 * 1000.0 * 1000.0,
+		StaleThreshold:			7,
+		DefaultCommitRatio:		0.95,
+	}
+
+	w, b := newTestWorker(t, chainConfig, minningConfig, engine, 0)
+
 	defer w.close()
 
 	// Ensure snapshot has been updated.
@@ -170,17 +180,31 @@ func testPendingStateAndBlock(t *testing.T, chainConfig *params.ChainConfig, eng
 	}
 }
 
-func TestEmptyWorkEthash(t *testing.T) {
-	testEmptyWork(t, ethashChainConfig, ethash.NewFaker())
+/*
+func TestEmptyWorkCbft(t *testing.T) {
+	testEmptyWork(t, ethashChainConfig, cbft.NewFaker())
 }
-func TestEmptyWorkClique(t *testing.T) {
-	testEmptyWork(t, cliqueChainConfig, clique.New(cliqueChainConfig.Clique, ethdb.NewMemDatabase()))
-}
+*/
 
 func testEmptyWork(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine) {
 	defer engine.Close()
 
-	w, _ := newTestWorker(t, chainConfig, engine, 0)
+	minningConfig := &core.MiningConfig{
+		MiningLogAtDepth: 		7,
+		TxChanSize: 			4096,
+		ChainHeadChanSize: 		10,
+		ChainSideChanSize:		10,
+		ResultQueueSize:		10,
+		ResubmitAdjustChanSize: 10,
+		MinRecommitInterval:	1 * time.Second,
+		MaxRecommitInterval:	15 * time.Second,
+		IntervalAdjustRatio:	0.1,
+		IntervalAdjustBias:		200 * 1000.0 * 1000.0,
+		StaleThreshold:			7,
+		DefaultCommitRatio:		0.95,
+	}
+	w, _ := newTestWorker(t, chainConfig, minningConfig, engine, 0)
+
 	defer w.close()
 
 	var (
@@ -230,8 +254,8 @@ func testEmptyWork(t *testing.T, chainConfig *params.ChainConfig, engine consens
 	}
 }
 
-func TestStreamUncleBlock(t *testing.T) {
-	ethash := ethash.NewFaker()
+/*func TestStreamUncleBlock(t *testing.T) {
+	ethash := cbft.NewFaker()
 	defer ethash.Close()
 
 	w, b := newTestWorker(t, ethashChainConfig, ethash, 1)
@@ -287,17 +311,29 @@ func TestStreamUncleBlock(t *testing.T) {
 }
 
 func TestRegenerateMiningBlockEthash(t *testing.T) {
-	testRegenerateMiningBlock(t, ethashChainConfig, ethash.NewFaker())
+	testRegenerateMiningBlock(t, ethashChainConfig, cbft.NewFaker())
 }
-
-func TestRegenerateMiningBlockClique(t *testing.T) {
-	testRegenerateMiningBlock(t, cliqueChainConfig, clique.New(cliqueChainConfig.Clique, ethdb.NewMemDatabase()))
-}
+*/
 
 func testRegenerateMiningBlock(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine) {
 	defer engine.Close()
 
-	w, b := newTestWorker(t, chainConfig, engine, 0)
+	minningConfig := &core.MiningConfig{
+		MiningLogAtDepth: 		7,
+		TxChanSize: 			4096,
+		ChainHeadChanSize: 		10,
+		ChainSideChanSize:		10,
+		ResultQueueSize:		10,
+		ResubmitAdjustChanSize: 10,
+		MinRecommitInterval:	1 * time.Second,
+		MaxRecommitInterval:	15 * time.Second,
+		IntervalAdjustRatio:	0.1,
+		IntervalAdjustBias:		200 * 1000.0 * 1000.0,
+		StaleThreshold:			7,
+		DefaultCommitRatio:		0.95,
+	}
+	w, b := newTestWorker(t, chainConfig, minningConfig, engine, 0)
+
 	defer w.close()
 
 	var taskCh = make(chan struct{})
@@ -351,18 +387,29 @@ func testRegenerateMiningBlock(t *testing.T, chainConfig *params.ChainConfig, en
 	}
 }
 
-func TestAdjustIntervalEthash(t *testing.T) {
-	testAdjustInterval(t, ethashChainConfig, ethash.NewFaker())
-}
-
-func TestAdjustIntervalClique(t *testing.T) {
-	testAdjustInterval(t, cliqueChainConfig, clique.New(cliqueChainConfig.Clique, ethdb.NewMemDatabase()))
-}
+/*func TestAdjustIntervalEthash(t *testing.T) {
+	testAdjustInterval(t, ethashChainConfig, cbft.NewFaker())
+}*/
 
 func testAdjustInterval(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine) {
 	defer engine.Close()
 
-	w, _ := newTestWorker(t, chainConfig, engine, 0)
+	minningConfig := &core.MiningConfig{
+		MiningLogAtDepth: 		7,
+		TxChanSize: 			4096,
+		ChainHeadChanSize: 		10,
+		ChainSideChanSize:		10,
+		ResultQueueSize:		10,
+		ResubmitAdjustChanSize: 10,
+		MinRecommitInterval:	1 * time.Second,
+		MaxRecommitInterval:	15 * time.Second,
+		IntervalAdjustRatio:	0.1,
+		IntervalAdjustBias:		200 * 1000.0 * 1000.0,
+		StaleThreshold:			7,
+		DefaultCommitRatio:		0.95,
+	}
+
+	w, _ := newTestWorker(t, chainConfig, minningConfig, engine, 0)
 	defer w.close()
 
 	w.skipSealHook = func(task *task) bool {
@@ -389,12 +436,12 @@ func testAdjustInterval(t *testing.T, chainConfig *params.ChainConfig, engine co
 			wantMinInterval, wantRecommitInterval = 3*time.Second, 3*time.Second
 		case 1:
 			origin := float64(3 * time.Second.Nanoseconds())
-			estimate := origin*(1-intervalAdjustRatio) + intervalAdjustRatio*(origin/0.8+intervalAdjustBias)
+			estimate := origin*(1-minningConfig.IntervalAdjustRatio) + minningConfig.IntervalAdjustRatio*(origin/0.8+minningConfig.IntervalAdjustBias)
 			wantMinInterval, wantRecommitInterval = 3*time.Second, time.Duration(int(estimate))*time.Nanosecond
 		case 2:
 			estimate := result[index-1]
 			min := float64(3 * time.Second.Nanoseconds())
-			estimate = estimate*(1-intervalAdjustRatio) + intervalAdjustRatio*(min-intervalAdjustBias)
+			estimate = estimate*(1-minningConfig.IntervalAdjustRatio) + minningConfig.IntervalAdjustRatio*(min-minningConfig.IntervalAdjustBias)
 			wantMinInterval, wantRecommitInterval = 3*time.Second, time.Duration(int(estimate))*time.Nanosecond
 		case 3:
 			wantMinInterval, wantRecommitInterval = time.Second, time.Second

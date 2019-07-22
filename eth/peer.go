@@ -17,11 +17,10 @@
 package eth
 
 import (
-	"crypto/md5"
 	"errors"
 	"fmt"
+	"github.com/PlatONnetwork/PlatON-Go/consensus"
 	"github.com/PlatONnetwork/PlatON-Go/core/cbfttypes"
-	"github.com/PlatONnetwork/PlatON-Go/p2p/discover"
 	"math/big"
 	"sync"
 	"time"
@@ -62,6 +61,9 @@ const (
 	maxQueuedAnns = 4
 
 	handshakeTimeout = 5 * time.Second
+
+	maxBlockingTxs = 10
+	maxPrioritySigCounts = 10
 )
 
 // PeerInfo represents a short summary of the Ethereum sub-protocol metadata known
@@ -84,7 +86,7 @@ type peer struct {
 	rw p2p.MsgReadWriter
 
 	version  int         // Protocol version negotiated
-	forkDrop *time.Timer // Timed connection dropper if forks aren't validated in time
+//	forkDrop *time.Timer // Timed connection dropper if forks aren't validated in time
 
 	head common.Hash
 	bn   *big.Int
@@ -144,7 +146,7 @@ func (p *peer) broadcast() {
 				p.Log().Trace("Propagated prepare block", "number", prop.block.Number(), "hash", prop.block.Hash())
 
 			case prop := <-p.queuedSignature:
-				signature := &cbfttypes.BlockSignature{SignHash: prop.SignHash, Hash: prop.Hash, Number: prop.Number, Signature: prop.Signature}
+				signature := &cbfttypes.BlockSignature{prop.SignHash, prop.Hash, prop.Number, prop.Signature}
 				if err := p.SendSignature(signature); err != nil {
 					return
 				}
@@ -164,7 +166,7 @@ func (p *peer) broadcast() {
 				if err := p.SendTransactions(txs); err != nil {
 					return
 				}
-				p.Log().Debug("Broadcast transactions", "count", len(txs))
+				p.Log().Trace("Broadcast transactions", "count", len(txs))
 
 			case <-p.term:
 				return
@@ -231,6 +233,28 @@ func (p *peer) MarkTransaction(hash common.Hash) {
 // SendTransactions sends transactions to the peer and includes the hashes
 // in its transaction hash set for future reference.
 func (p *peer) SendTransactions(txs types.Transactions) error {
+	// send signature first before send tx msg.&& len(txs) > 20
+	if len(p.queuedSignature) != 0 && len(txs) > maxBlockingTxs {
+		var count uint32
+	finish:
+		for  {
+			if len(p.queuedSignature) == 0 || count > maxPrioritySigCounts {
+				break finish
+			}
+			select {
+			case prop := <- p.queuedSignature:
+				signature := &cbfttypes.BlockSignature{prop.SignHash, prop.Hash, prop.Number, prop.Signature}
+				if err := p.SendSignature(signature); err != nil {
+					p.Log().Error("Propagated signature fail::", "hash", signature.Hash)
+				}
+				count++
+				p.Log().Trace("Priority propagated signature success::", "hash", signature.Hash)
+			default:
+				p.Log().Trace("Priority propagated signature timeout")
+				break finish
+			}
+		}
+	}
 	for _, tx := range txs {
 		p.knownTxs.Add(tx.Hash())
 	}
@@ -315,11 +339,6 @@ func (p *peer) SendNodeData(data [][]byte) error {
 	return p2p.Send(p.rw, NodeDataMsg, data)
 }
 
-func (p *peer) SendPposStorage(latest *types.Header, pivot *types.Header, data []byte) error {
-	p.Log().Debug("send pposStorage content", "latest", latest.Number.Uint64(), "pivot", pivot.Number.Uint64(), "data length", len(data), "data md5", md5.Sum(data))
-	return p2p.Send(p.rw, PposStorageMsg, []interface{}{latest, pivot, data})
-}
-
 // SendReceiptsRLP sends a batch of transaction receipts, corresponding to the
 // ones requested from an already RLP encoded format.
 func (p *peer) SendReceiptsRLP(receipts []rlp.RawValue) error {
@@ -367,11 +386,6 @@ func (p *peer) RequestReceipts(hashes []common.Hash) error {
 	return p2p.Send(p.rw, GetReceiptsMsg, hashes)
 }
 
-func (p *peer) RequestLatestPposStorage() error {
-	p.Log().Debug("Fetching latest ppos storage")
-	return p2p.Send(p.rw, GetPposStorageMsg, []interface{}{})
-}
-
 // Handshake executes the eth protocol handshake, negotiating version number,
 // network IDs, difficulties, head and genesis blocks.
 func (p *peer) Handshake(network uint64, bn *big.Int, head common.Hash, genesis common.Hash, pm *ProtocolManager) error {
@@ -405,11 +419,11 @@ func (p *peer) Handshake(network uint64, bn *big.Int, head common.Hash, genesis 
 	}
 	// A simple hash consistency check,but does not prevent malicious node connections
 	if bn == status.BN && head != status.CurrentBlock {
-		return errResp(ErrBlockMismatch, "blockNumber", head, "%x (!= %x)", head.String(), status.CurrentBlock.String())
+		return errResp(ErrBlockMismatch, "blockNumber=%v,%x (!= %x)", head, head.String(), status.CurrentBlock.String())
 	} else if bn.Uint64() > status.BN.Uint64() {
 		lowHeader := pm.blockchain.GetHeaderByNumber(status.BN.Uint64())
 		if lowHeader.Hash() != status.CurrentBlock {
-			return errResp(ErrBlockMismatch, "blockNumber", status.BN.Uint64(), "%x (!= %x)", lowHeader.Hash().String(), status.CurrentBlock.String())
+			return errResp(ErrBlockMismatch, "blockNumber=%v,%x (!= %x)", status.BN.Uint64(), lowHeader.Hash().String(), status.CurrentBlock.String())
 		}
 	}
 	p.bn, p.head = status.BN, status.CurrentBlock
@@ -592,43 +606,48 @@ func (ps *peerSet) Close() {
 	ps.closed = true
 }
 
-func (ps *peerSet) PeersWithConsensus(consensusNodes []discover.NodeID) []*peer {
+func (ps *peerSet) PeersWithConsensus(engine consensus.Engine) []*peer {
 	ps.lock.RLock()
 	defer ps.lock.RUnlock()
 
-	list := make([]*peer, 0, len(consensusNodes))
-	for _, nodeID := range consensusNodes {
-		nodeID := fmt.Sprintf("%x", nodeID.Bytes()[:8])
-		if peer, ok := ps.peers[nodeID]; ok {
+	if cbftEngine, ok := engine.(consensus.Bft); ok {
+		if consensusNodes, err := cbftEngine.ConsensusNodes(); err == nil && len(consensusNodes) > 0 {
+			list := make([]*peer, 0, len(consensusNodes))
+			for _, nodeID := range consensusNodes {
+				nodeID := fmt.Sprintf("%x", nodeID.Bytes()[:8])
+				if peer, ok := ps.peers[nodeID]; ok {
+					list = append(list, peer)
+				}
+			}
+			return list
+		}
+	}
+	return nil
+}
+
+func (ps *peerSet) PeersWithoutConsensus(engine consensus.Engine) []*peer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	consensusNodeMap := make(map[string]string)
+	if cbftEngine, ok := engine.(consensus.Bft); ok {
+		if consensusNodes, err := cbftEngine.ConsensusNodes(); err == nil && len(consensusNodes) > 0 {
+			for _, nodeID := range consensusNodes {
+				nodeID := fmt.Sprintf("%x", nodeID.Bytes()[:8])
+				consensusNodeMap[nodeID] = nodeID
+			}
+		}
+	}
+
+	list := make([]*peer, 0, len(ps.peers))
+	for nodeId, peer := range ps.peers {
+		if _, ok := consensusNodeMap[nodeId]; !ok {
 			list = append(list, peer)
 		}
 	}
+
 	return list
 }
-
-//func (ps *peerSet) PeersWithoutConsensus(engine consensus.Engine) []*peer {
-//	ps.lock.RLock()
-//	defer ps.lock.RUnlock()
-//
-//	consensusNodeMap := make(map[string]string)
-//	if cbftEngine, ok := engine.(consensus.Bft); ok {
-//		if consensusNodes, err := cbftEngine.ConsensusNodes(); err == nil && len(consensusNodes) > 0 {
-//			for _, nodeID := range consensusNodes {
-//				nodeID := fmt.Sprintf("%x", nodeID.Bytes()[:8])
-//				consensusNodeMap[nodeID] = nodeID
-//			}
-//		}
-//	}
-//
-//	list := make([]*peer, 0, len(ps.peers))
-//	for nodeId, peer := range ps.peers {
-//		if _, ok := consensusNodeMap[nodeId]; !ok {
-//			list = append(list, peer)
-//		}
-//	}
-//
-//	return list
-//}
 
 type preBlockEvent struct {
 	block *types.Block
