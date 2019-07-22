@@ -16,9 +16,13 @@ func (cbft *Cbft) OnPrepareBlock(id string, msg *protocols.PrepareBlock) error {
 	if err := cbft.safetyRules.PrepareBlockRules(msg); err != nil {
 		if err.Fetch() {
 			cbft.fetchBlock(id, msg.Block.Hash(), msg.Block.NumberU64())
-			//todo fetch block
+		} else if err.NewView() {
+			cbft.changeView(msg.Epoch, msg.ViewNumber)
+		} else {
+			return nil
 		}
 	}
+
 	cbft.state.AddPrepareBlock(msg)
 
 	cbft.prepareBlockFetchRules(id, msg)
@@ -31,7 +35,7 @@ func (cbft *Cbft) OnPrepareBlock(id string, msg *protocols.PrepareBlock) error {
 func (cbft *Cbft) OnPrepareVote(id string, msg *protocols.PrepareVote) error {
 	if err := cbft.safetyRules.PrepareVoteRules(msg); err != nil {
 		if err.Fetch() {
-			//todo fetch block
+			cbft.fetchBlock(id, msg.BlockHash, msg.BlockNumber)
 		}
 	}
 
@@ -53,6 +57,9 @@ func (cbft *Cbft) OnViewChange(id string, msg *protocols.ViewChange) error {
 
 	//todo parse pubkey as id
 	cbft.state.AddViewChange("", msg)
+
+	// It is possible to achieve viewchangeQC every time you add viewchange
+	cbft.tryChangeView()
 	return nil
 }
 
@@ -77,9 +84,11 @@ func (cbft *Cbft) onAsyncExecuteStatus(s *executor.BlockExecuteStatus) {
 	cbft.findExecutableBlock()
 }
 
+// Sign the block that has been executed
+// Every time try to trigger a send PrepareVote
 func (cbft *Cbft) signBlock(hash common.Hash, number uint64, index uint32) {
-	//todo sign vote
-
+	// todo sign vote
+	// parentQC added when sending
 	prepareVote := &protocols.PrepareVote{
 		Epoch:       cbft.state.Epoch(),
 		ViewNumber:  cbft.state.ViewNumber(),
@@ -90,14 +99,14 @@ func (cbft *Cbft) signBlock(hash common.Hash, number uint64, index uint32) {
 
 	cbft.state.PendingPrepareVote().Push(prepareVote)
 
-	cbft.sendPrepareVote()
+	cbft.trySendPrepareVote()
 }
 
 // Send a signature,
 // obtain a signature from the pending queue,
 // determine whether the parent block has reached QC,
 // and send a signature if it is reached, otherwise exit the sending logic.
-func (cbft *Cbft) sendPrepareVote() {
+func (cbft *Cbft) trySendPrepareVote() {
 	pending := cbft.state.PendingPrepareVote()
 	hadSend := cbft.state.HadSendPrepareVote()
 
@@ -174,6 +183,7 @@ func (cbft *Cbft) findQCBlock() {
 		cbft.state.SetHighestQCBlock(block)
 		cbft.tryCommitNewBlock(lock, commit)
 	}
+	cbft.tryChangeView()
 }
 
 // Try commit a new block
@@ -208,7 +218,29 @@ func (cbft *Cbft) tryChangeView() {
 	}
 }
 
+// change view
+func (cbft *Cbft) changeView(epoch, viewNumber uint64) {
+	cbft.state.ResetView(epoch, viewNumber)
+}
+
 // Clean up invalid blocks in the previous view
-func (cbft *Cbft) clearInvalidBlocks() {
+func (cbft *Cbft) clearInvalidBlocks(newBlock *types.Block) {
 	//todo reset txpool
+	var rollback []*types.Block
+	newHead := newBlock.Header()
+	for _, p := range cbft.state.HadSendPrepareVote().Peek() {
+		if p.BlockNumber > newBlock.NumberU64() {
+			block := cbft.state.ViewBlockByIndex(p.BlockIndex)
+			rollback = append(rollback, block)
+			cbft.blockCacheWriter.ClearCache(block)
+		}
+	}
+	for _, p := range cbft.state.PendingPrepareVote().Peek() {
+		if p.BlockNumber > newBlock.NumberU64() {
+			block := cbft.state.ViewBlockByIndex(p.BlockIndex)
+			rollback = append(rollback, block)
+			cbft.blockCacheWriter.ClearCache(block)
+		}
+	}
+	cbft.txPool.ForkedReset(newHead, rollback)
 }
