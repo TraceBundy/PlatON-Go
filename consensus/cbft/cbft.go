@@ -593,6 +593,11 @@ func (cbft *Cbft) commitBlock(block *types.Block, qc *ctypes.QuorumCert) {
 	})
 }
 
+// Return to the implementation of Router.
+func (cbft *Cbft) Router() Router {
+	return cbft.routing
+}
+
 func (cbft *Cbft) Evidences() string {
 	evs := cbft.evPool.Evidences()
 	if len(evs) == 0 {
