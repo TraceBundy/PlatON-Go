@@ -12,8 +12,11 @@ import (
 )
 
 const (
-	deployContract = iota
+	transfer = iota
+	deployContract
 	invokeContract
+	vote
+	permission
 
 	DefaultConfigFilePath = "/config.json"
 )

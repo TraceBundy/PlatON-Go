@@ -18,14 +18,13 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"reflect"
 	"unicode"
-	"github.com/PlatONnetwork/PlatON-Go/x/xcom"
+
 	cli "gopkg.in/urfave/cli.v1"
 
 	"github.com/PlatONnetwork/PlatON-Go/cmd/utils"
@@ -35,7 +34,6 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/params"
 	whisper "github.com/PlatONnetwork/PlatON-Go/whisper/whisperv6"
 	"github.com/naoina/toml"
-
 )
 
 var (
@@ -82,7 +80,6 @@ type gethConfig struct {
 	Node      node.Config
 	Ethstats  ethstatsConfig
 	Dashboard dashboard.Config
-	EconomicModel xcom.EconomicModel
 }
 
 func loadConfig(file string, cfg *gethConfig) error {
@@ -100,26 +97,12 @@ func loadConfig(file string, cfg *gethConfig) error {
 	return err
 }
 
-func loadConfigFile(filePath string, cfg *gethConfig) error {
-	file, err := os.Open(filePath)
-	if err != nil {
-		utils.Fatalf("Failed to read config file: %v", err)
-	}
-	defer file.Close()
-
-	err = json.NewDecoder(file).Decode(cfg)
-	if err != nil {
-		utils.Fatalf("invalid config file: %v", err)
-	}
-	return err
-}
-
 func defaultNodeConfig() node.Config {
 	cfg := node.DefaultConfig
 	cfg.Name = clientIdentifier
 	cfg.Version = params.VersionWithCommit(gitCommit)
-	cfg.HTTPModules = append(cfg.HTTPModules, "platon", "shh")
-	cfg.WSModules = append(cfg.WSModules, "platon", "shh")
+	cfg.HTTPModules = append(cfg.HTTPModules, "eth", "shh")
+	cfg.WSModules = append(cfg.WSModules, "eth", "shh")
 	cfg.IPCPath = "platon.ipc"
 	return cfg
 }
@@ -128,24 +111,19 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 
 	// Load defaults.
 	cfg := gethConfig{
-		Eth:       	   eth.DefaultConfig,
-		Shh:       	   whisper.DefaultConfig,
-		Node:      	   defaultNodeConfig(),
-		Dashboard: 	   dashboard.DefaultConfig,
-		EconomicModel: xcom.DefaultConfig,
+		Eth:       eth.DefaultConfig,
+		Shh:       whisper.DefaultConfig,
+		Node:      defaultNodeConfig(),
+		Dashboard: dashboard.DefaultConfig,
 	}
 
 	// Load config file.
 	if file := ctx.GlobalString(configFileFlag.Name); file != "" {
-	/*	if err := loadConfig(file, &cfg); err != nil {
-			utils.Fatalf("%v", err)
-		}*/
-		if err := loadConfigFile(file, &cfg); err != nil {
+		if err := loadConfig(file, &cfg); err != nil {
 			utils.Fatalf("%v", err)
 		}
 	}
 
-	xcom.SetEconomicModel(&cfg.EconomicModel)
 	// Current version only supports full syncmode
 	//ctx.GlobalSet(utils.SyncModeFlag.Name, cfg.Eth.SyncMode.String())
 
@@ -160,16 +138,15 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 	utils.SetEthConfig(ctx, stack, &cfg.Eth)
 
 	// pass on the rpc port to mpc pool conf.
-	//cfg.Eth.MPCPool.LocalRpcPort = cfg.Node.HTTPPort
+	cfg.Eth.MPCPool.LocalRpcPort = cfg.Node.HTTPPort
 
 	// pass on the rpc port to vc pool conf.
-	//cfg.Eth.VCPool.LocalRpcPort = cfg.Node.HTTPPort
+	cfg.Eth.VCPool.LocalRpcPort = cfg.Node.HTTPPort
 
 	// load cbft config file.
-	//if cbftConfig := cfg.Eth.LoadCbftConfig(cfg.Node); cbftConfig != nil {
-	//	cfg.Eth.CbftConfig = *cbftConfig
-	//}
-	utils.SetCbft(ctx, &cfg.Eth.CbftConfig)
+	if cbftConfig := cfg.Eth.LoadCbftConfig(cfg.Node); cbftConfig != nil {
+		cfg.Eth.CbftConfig = *cbftConfig
+	}
 
 	if ctx.GlobalIsSet(utils.EthStatsURLFlag.Name) {
 		cfg.Ethstats.URL = ctx.GlobalString(utils.EthStatsURLFlag.Name)
@@ -207,6 +184,9 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 		if ctx.GlobalIsSet(utils.WhisperMaxMessageSizeFlag.Name) {
 			cfg.Shh.MaxMessageSize = uint32(ctx.Int(utils.WhisperMaxMessageSizeFlag.Name))
 		}
+		if ctx.GlobalIsSet(utils.WhisperMinPOWFlag.Name) {
+			cfg.Shh.MinimumAcceptedPOW = ctx.Float64(utils.WhisperMinPOWFlag.Name)
+		}
 		if ctx.GlobalIsSet(utils.WhisperRestrictConnectionBetweenLightClientsFlag.Name) {
 			cfg.Shh.RestrictConnectionBetweenLightClients = true
 		}
@@ -218,34 +198,6 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 		utils.RegisterEthStatsService(stack, cfg.Ethstats.URL)
 	}
 	return stack
-}
-
-func makeFullNodeForCBFT(ctx *cli.Context) (*node.Node, gethConfig) {
-	stack, cfg := makeConfigNode(ctx)
-
-	utils.RegisterEthService(stack, &cfg.Eth)
-
-	if ctx.GlobalBool(utils.DashboardEnabledFlag.Name) {
-		utils.RegisterDashboardService(stack, &cfg.Dashboard, gitCommit)
-	}
-	// Whisper must be explicitly enabled by specifying at least 1 whisper flag or in dev mode
-	shhEnabled := enableWhisper(ctx)
-	shhAutoEnabled := !ctx.GlobalIsSet(utils.WhisperEnabledFlag.Name) && ctx.GlobalIsSet(utils.DeveloperFlag.Name)
-	if shhEnabled || shhAutoEnabled {
-		if ctx.GlobalIsSet(utils.WhisperMaxMessageSizeFlag.Name) {
-			cfg.Shh.MaxMessageSize = uint32(ctx.Int(utils.WhisperMaxMessageSizeFlag.Name))
-		}
-		if ctx.GlobalIsSet(utils.WhisperRestrictConnectionBetweenLightClientsFlag.Name) {
-			cfg.Shh.RestrictConnectionBetweenLightClients = true
-		}
-		utils.RegisterShhService(stack, &cfg.Shh)
-	}
-
-	// Add the Ethereum Stats daemon if requested.
-	if cfg.Ethstats.URL != "" {
-		utils.RegisterEthStatsService(stack, cfg.Ethstats.URL)
-	}
-	return stack, cfg
 }
 
 // dumpConfig is the dumpconfig command.

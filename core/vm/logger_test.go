@@ -17,10 +17,9 @@
 package vm
 
 import (
-	"bytes"
 	"github.com/PlatONnetwork/PlatON-Go/log"
+	"bytes"
 	"math/big"
-	"strings"
 	"testing"
 
 	"github.com/PlatONnetwork/PlatON-Go/common"
@@ -80,7 +79,7 @@ func TestNewWasmLogger(t *testing.T) {
 
 	wasmLog.Info("hello")
 	wasmLog.Flush()
-	if !strings.Contains(buf.String(), "hello") {
-		t.Fatal("output log error", buf.String())
+	if buf.String() != "hello" {
+		t.Fatalf("output log error")
 	}
 }

@@ -18,21 +18,20 @@
 package consensus
 
 import (
-	"crypto/ecdsa"
-	"time"
-
 	"github.com/PlatONnetwork/PlatON-Go/common"
 	"github.com/PlatONnetwork/PlatON-Go/core/cbfttypes"
 	"github.com/PlatONnetwork/PlatON-Go/core/state"
 	"github.com/PlatONnetwork/PlatON-Go/core/types"
-	"github.com/PlatONnetwork/PlatON-Go/p2p"
+	"github.com/PlatONnetwork/PlatON-Go/core/vm"
 	"github.com/PlatONnetwork/PlatON-Go/p2p/discover"
 	"github.com/PlatONnetwork/PlatON-Go/params"
 	"github.com/PlatONnetwork/PlatON-Go/rpc"
+	"crypto/ecdsa"
+	"math/big"
 )
 
 // ChainReader defines a small collection of methods needed to access the local
-// blockchain during header verification.
+// blockchain during header and/or uncle verification.
 type ChainReader interface {
 	// Config retrieves the blockchain's chain configuration.
 	Config() *params.ChainConfig
@@ -53,17 +52,6 @@ type ChainReader interface {
 	GetBlock(hash common.Hash, number uint64) *types.Block
 }
 
-type TxPoolReset interface {
-	ForkedReset(newHeader *types.Header, rollback []*types.Block)
-	Reset(newBlock *types.Block)
-}
-
-//Execution block, you need to pass in the parent block to find the parent block state
-type BlockCacheWriter interface {
-	Execute(block *types.Block, parent *types.Block) error
-	ClearCache(block *types.Block)
-}
-
 // Engine is an algorithm agnostic consensus engine.
 type Engine interface {
 	// Author retrieves the Ethereum address of the account that minted the given
@@ -82,6 +70,10 @@ type Engine interface {
 	// the input slice).
 	VerifyHeaders(chain ChainReader, headers []*types.Header, seals []bool) (chan<- struct{}, <-chan error)
 
+	// VerifyUncles verifies that the given block's uncles conform to the consensus
+	// rules of a given engine.
+	VerifyUncles(chain ChainReader, block *types.Block) error
+
 	// VerifySeal checks whether the crypto seal on a header is valid according to
 	// the consensus rules of the given engine.
 	VerifySeal(chain ChainReader, header *types.Header) error
@@ -95,7 +87,7 @@ type Engine interface {
 	// Note: The block header and state database might be updated to reflect any
 	// consensus rules that happen at finalization (e.g. block rewards).
 	Finalize(chain ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction,
-		receipts []*types.Receipt) (*types.Block, error)
+		uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error)
 
 	// Seal generates a new sealing request for the given input block and pushes
 	// the result into the given channel.
@@ -110,21 +102,6 @@ type Engine interface {
 	// APIs returns the RPC APIs this consensus engine provides.
 	APIs(chain ChainReader) []rpc.API
 
-	Protocols() []p2p.Protocol
-
-	NextBaseBlock() *types.Block
-
-	InsertChain(block *types.Block, errCh chan error)
-
-	HasBlock(hash common.Hash, number uint64) bool
-
-	Status() string
-	GetBlockByHash(hash common.Hash) *types.Block
-
-	CurrentBlock() *types.Block
-
-	FastSyncCommitHead() <-chan error
-
 	// Close terminates any background threads maintained by the consensus engine.
 	Close() error
 }
@@ -137,42 +114,67 @@ type PoW interface {
 	Hashrate() float64
 }
 
-// Agency
-type Agency interface {
-	Sign(msg interface{}) error
-	VerifySign(msg interface{}) error
-	VerifyHeader(header *types.Header) error
-	GetLastNumber(blockNumber uint64) uint64
-	GetValidator(blockNumber uint64) (*cbfttypes.Validators, error)
-	IsCandidateNode(nodeID discover.NodeID) bool
-}
-
 type Bft interface {
 	Engine
 
-	Start(chain ChainReader, blockCacheWriter BlockCacheWriter, pool TxPoolReset, agency Agency) error
+	// the former round of consensus node ids
+	//FormerNodeID() []discover.NodeID
 
-	// Returns the current consensus node address list.
-	ConsensusNodes() ([]discover.NodeID, error)
+	// the former round of consensus nodes
+	//FormerNodes(parentNumber *big.Int, parentHash common.Hash, blockNumber *big.Int) []*discover.Node
 
-	// Returns whether the current node is out of the block
-	ShouldSeal(curTime time.Time) (bool, error)
+	// the current round of consensus node ids
+	//CurrentNodeID() []discover.NodeID
 
-	CalcBlockDeadline(timePoint time.Time) time.Time
+	// the current round of consensus nodes
+	CurrentNodes(parentNumber *big.Int, parentHash common.Hash, blockNumber *big.Int) []*discover.Node
 
-	CalcNextBlockTime(timePoint time.Time) time.Time
+	IsCurrentNode(parentNumber *big.Int, parentHash common.Hash, blockNumber *big.Int) bool
 
-	IsConsensusNode() bool
+	ConsensusNodes(parentNumber *big.Int, parentHash common.Hash, blockNumber *big.Int) []discover.NodeID
+
+	// whether the current node should packing
+	ShouldSeal(parentNumber *big.Int, parentHash common.Hash, commitNumber *big.Int) bool
+
+	// received a new block signature
+	// verify if the signature is signed by nodeID
+	OnBlockSignature(chain ChainReader, nodeID discover.NodeID, sig *cbfttypes.BlockSignature) error
+
+	// Process the BFT signatures
+	OnNewBlock(chain ChainReader, block *types.Block) error
+
+	// Process the BFT signatures
+	OnPong(nodeID discover.NodeID, netLatency int64) error
+
+	// Send a signal if a block synced from other peer.
+	OnBlockSynced()
+	//CheckConsensusNode(nodeID discover.NodeID) (bool, error)
+
+	//IsConsensusNode() (bool, error)
+
+	// At present, the highest reasonable block, when the node is out of the block, it needs to generate the block based on the highest reasonable block.
+	HighestLogicalBlock() *types.Block
+
+	HighestConfirmedBlock() *types.Block
 
 	GetBlock(hash common.Hash, number uint64) *types.Block
-
-	GetBlockWithoutLock(hash common.Hash, number uint64) *types.Block
-
 	SetPrivateKey(privateKey *ecdsa.PrivateKey)
 
-	IsSignedBySelf(sealHash common.Hash, signature []byte) bool
+	Election(state *state.StateDB, parentHash common.Hash, blockNumber *big.Int) ([]*discover.Node, error)
 
-	Evidences() string
+	Switch(state *state.StateDB, blockNumber *big.Int) bool
 
-	TracingSwitch(flag int8)
+	GetWitness(state *state.StateDB, flag int, blockNumber *big.Int) ([]*discover.Node, error)
+
+	GetOwnNodeID() discover.NodeID
+
+	SetNodeCache(state *state.StateDB, parentNumber, currentNumber *big.Int, parentHash, currentHash common.Hash) error
+
+	Notify(state vm.StateDB, blockNumber *big.Int) error
+
+	StoreHash(state *state.StateDB, blockNumber *big.Int, blockHash common.Hash)
+
+	Submit2Cache(state *state.StateDB, currBlocknumber *big.Int, blockInterval *big.Int, currBlockhash common.Hash)
+
+	RemovePeer(nodeID discover.NodeID)
 }
