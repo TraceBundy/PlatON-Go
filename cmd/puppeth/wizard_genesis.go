@@ -41,17 +41,65 @@ func (w *wizard) makeGenesis() {
 		GasLimit:   3150000000,
 		Alloc:      make(core.GenesisAlloc),
 		Config: &params.ChainConfig{
-			EIP155Block:    big.NewInt(0),
+			HomesteadBlock: big.NewInt(1),
+			EIP150Block:    big.NewInt(2),
+			EIP155Block:    big.NewInt(3),
+			EIP158Block:    big.NewInt(3),
+			ByzantiumBlock: big.NewInt(4),
 		},
 	}
 	// Figure out which consensus engine to choose
 	fmt.Println()
 	fmt.Println("Which consensus engine to use? (default = CBFT)")
-	fmt.Println(" 1. CBFT -   Concurrent Byzantine Fault Tolerance")
+	fmt.Println(" 1. Ethash - proof-of-work")
+	fmt.Println(" 2. Clique - proof-of-authority")
+	fmt.Println(" 3. CBFT -   Concurrent Byzantine Fault Tolerance")
 
 	choice := w.read()
 	switch {
-	case choice == "" || choice == "1":
+	case choice == "1":
+		// In case of ethash, we're pretty much done
+		genesis.Config.Ethash = new(params.EthashConfig)
+		genesis.ExtraData = make([]byte, 32)
+
+	case choice == "2":
+		// In the case of clique, configure the consensus parameters
+		genesis.Config.Clique = &params.CliqueConfig{
+			Period: 15,
+			Epoch:  30000,
+		}
+		fmt.Println()
+		fmt.Println("How many seconds should blocks take? (default = 15)")
+		genesis.Config.Clique.Period = uint64(w.readDefaultInt(15))
+
+		// We also need the initial list of signers
+		fmt.Println()
+		fmt.Println("Which accounts are allowed to seal? (mandatory at least one)")
+
+		var signers []common.Address
+		for {
+			if address := w.readAddress(); address != nil {
+				signers = append(signers, *address)
+				continue
+			}
+			if len(signers) > 0 {
+				break
+			}
+		}
+		// Sort the signers and embed into the extra-data section
+		for i := 0; i < len(signers); i++ {
+			for j := i + 1; j < len(signers); j++ {
+				if bytes.Compare(signers[i][:], signers[j][:]) > 0 {
+					signers[i], signers[j] = signers[j], signers[i]
+				}
+			}
+		}
+		genesis.ExtraData = make([]byte, 32+len(signers)*common.AddressLength+65)
+		for i, signer := range signers {
+			copy(genesis.ExtraData[32+i*common.AddressLength:], signer[:])
+		}
+
+	case choice == "" || choice == "3":
 		// In the case of cbft, configure the consensus parameters
 		genesis.Config.Cbft = &params.CbftConfig{}
 		// We also need the initial list of signers
@@ -127,10 +175,24 @@ func (w *wizard) manageGenesis() {
 	case choice == "1":
 		// Fork rule updating requested, iterate over each fork
 		fmt.Println()
+		fmt.Printf("Which block should Homestead come into effect? (default = %v)\n", w.conf.Genesis.Config.HomesteadBlock)
+		w.conf.Genesis.Config.HomesteadBlock = w.readDefaultBigInt(w.conf.Genesis.Config.HomesteadBlock)
+
+		fmt.Println()
+		fmt.Printf("Which block should EIP150 come into effect? (default = %v)\n", w.conf.Genesis.Config.EIP150Block)
+		w.conf.Genesis.Config.EIP150Block = w.readDefaultBigInt(w.conf.Genesis.Config.EIP150Block)
 
 		fmt.Println()
 		fmt.Printf("Which block should EIP155 come into effect? (default = %v)\n", w.conf.Genesis.Config.EIP155Block)
 		w.conf.Genesis.Config.EIP155Block = w.readDefaultBigInt(w.conf.Genesis.Config.EIP155Block)
+
+		fmt.Println()
+		fmt.Printf("Which block should EIP158 come into effect? (default = %v)\n", w.conf.Genesis.Config.EIP158Block)
+		w.conf.Genesis.Config.EIP158Block = w.readDefaultBigInt(w.conf.Genesis.Config.EIP158Block)
+
+		fmt.Println()
+		fmt.Printf("Which block should Byzantium come into effect? (default = %v)\n", w.conf.Genesis.Config.ByzantiumBlock)
+		w.conf.Genesis.Config.ByzantiumBlock = w.readDefaultBigInt(w.conf.Genesis.Config.ByzantiumBlock)
 
 		out, _ := json.MarshalIndent(w.conf.Genesis.Config, "", "  ")
 		fmt.Printf("Chain configuration updated:\n\n%s\n", out)

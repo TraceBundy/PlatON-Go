@@ -17,13 +17,19 @@
 package core
 
 import (
+	"encoding/hex"
+	"fmt"
 	"github.com/PlatONnetwork/PlatON-Go/common"
 	"github.com/PlatONnetwork/PlatON-Go/consensus"
+	"github.com/PlatONnetwork/PlatON-Go/consensus/misc"
 	"github.com/PlatONnetwork/PlatON-Go/core/state"
 	"github.com/PlatONnetwork/PlatON-Go/core/types"
 	"github.com/PlatONnetwork/PlatON-Go/core/vm"
 	"github.com/PlatONnetwork/PlatON-Go/crypto"
 	"github.com/PlatONnetwork/PlatON-Go/params"
+	"github.com/PlatONnetwork/PlatON-Go/log"
+	"math/big"
+	"sync"
 )
 
 // StateProcessor is a basic Processor, which takes care of transitioning
@@ -34,6 +40,7 @@ type StateProcessor struct {
 	config *params.ChainConfig // Chain configuration options
 	bc     *BlockChain         // Canonical block chain
 	engine consensus.Engine    // Consensus engine used for block rewards
+	lock   sync.Mutex
 }
 
 // NewStateProcessor initialises a new StateProcessor.
@@ -46,13 +53,13 @@ func NewStateProcessor(config *params.ChainConfig, bc *BlockChain, engine consen
 }
 
 // Process processes the state changes according to the Ethereum rules by running
-// the transaction messages using the statedb and applying any rewards to
-// the processor (coinbase).
+// the transaction messages using the statedb and applying any rewards to both
+// the processor (coinbase) and any included uncles.
 //
 // Process returns the receipts and logs accumulated during the process and
 // returns the amount of gas that was used in the process. If any of the
 // transactions failed to execute due to insufficient gas it will return an error.
-func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error) {
+func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config, blockInterval *big.Int) (types.Receipts, []*types.Log, uint64, error) {
 	var (
 		receipts types.Receipts
 		usedGas  = new(uint64)
@@ -60,18 +67,18 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		allLogs  []*types.Log
 		gp       = new(GasPool).AddGas(block.GasLimit())
 	)
-
-	//if bcr != nil {
-	//	// TODO begin()
-	//	if success, err := bcr.BeginBlocker(block.Header(), statedb); nil != err || !success {
-	//		return nil, nil, 0, err
-	//	}
-	//}
-
+	// Mutate the block and state according to any hard-fork specs
+	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
+		misc.ApplyDAOHardFork(statedb)
+	}
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 		statedb.Prepare(tx.Hash(), block.Hash(), i)
 		receipt, _, err := ApplyTransaction(p.config, p.bc, nil, gp, statedb, header, tx, usedGas, cfg)
+		log.Debug("process tx receipt", "hash", tx.Hash(), "PostState", hex.EncodeToString(receipt.PostState), "bloom", hex.EncodeToString(receipt.Bloom.Bytes()))
+		for _, l := range receipt.Logs {
+			log.Debug("logs", "data", hex.EncodeToString(l.Data))
+		}
 		if err != nil {
 			return nil, nil, 0, err
 		}
@@ -79,16 +86,41 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		allLogs = append(allLogs, receipt.Logs...)
 	}
 
-	//if bcr != nil {
-	//	// TODO end ()
-	//	if success, err := bcr.EndBlocker(block.Header(), statedb); nil != err || !success {
-	//		return nil, nil, 0, err
-	//	}
-	//}
+	if cbftEngine, ok := p.bc.engine.(consensus.Bft); ok {
+		// Notify call
+		if err := cbftEngine.Notify(statedb, block.Number()); err != nil {
+			log.Error("---Failed to Notify call when processing block:---",  "err", err, "number", block.Number(), "hash", block.Hash())
+		}
+		// Election call(if match condition)
+		if p.bc.shouldElectionFn(block.Number()) {
+			log.Info("---Election call when processing block:---", "number", block.Number(), "hash", block.Hash())
+			if _, err := cbftEngine.Election(statedb, block.ParentHash(), block.Number()); nil != err {
+				log.Error("---Failed to Election call when processing block:---", "err", err, "number", block.Number(), "hash", block.Hash())
+			}
+		}
+		// SwitchWitness call(if match condition)
+		if p.bc.shouldSwitchFn(block.Number()) {
+			log.Info("---SwitchWitness call when processing block:---", "number", block.Number(), "hash", block.Hash())
+			if !cbftEngine.Switch(statedb, block.Number()) {
+				log.Error("---Failed to SwitchWitness call when processing block:---", "number", block.Number(), "hash", block.Hash())
+			}
+
+		}
+		// ppos Store Hash
+		cbftEngine.StoreHash(statedb, block.Number(), block.Hash())
+	}
 
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
-	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), receipts)
+	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles(), receipts)
 
+	if cbftEngine, ok := p.bc.engine.(consensus.Bft); ok {
+		// SetNodeCache
+		blockNumber := block.Number()
+		parentNumber := new(big.Int).Sub(blockNumber, common.Big1)
+		cbftEngine.SetNodeCache(statedb, parentNumber, blockNumber, block.ParentHash(), block.Hash())
+		// ppos Submit2Cache
+		cbftEngine.Submit2Cache(statedb, blockNumber, blockInterval, block.Hash())
+	}
 	return receipts, allLogs, *usedGas, nil
 }
 
@@ -97,8 +129,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 // for the transaction, gas used and an error if the transaction failed,
 // indicating the block was invalid.
 func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config) (*types.Receipt, uint64, error) {
-	msg, err := tx.AsMessage(types.NewEIP155Signer(config.ChainID))
-
+	msg, err := tx.AsMessage(types.MakeSigner(config, header.Number))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -107,6 +138,7 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
 	vmenv := vm.NewEVM(context, statedb, config, cfg)
+	log.Debug("ApplyTransaction", "statedb addr", fmt.Sprintf("%p", vmenv.StateDB))
 	// Apply the transaction to the current state (included in the env)
 	_, gas, failed, err := ApplyMessage(vmenv, msg, gp)
 	if err != nil {
@@ -114,7 +146,11 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	}
 	// Update the state with pending changes
 	var root []byte
-	root = statedb.IntermediateRoot(true).Bytes()
+	if config.IsByzantium(header.Number) {
+		statedb.Finalise(true)
+	} else {
+		root = statedb.IntermediateRoot(config.IsEIP158(header.Number)).Bytes()
+	}
 	*usedGas += gas
 
 	// Create a new receipt for the transaction, storing the intermediate root and gas used by the tx
@@ -129,6 +165,5 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	// Set the receipt logs and create a bloom for filtering
 	receipt.Logs = statedb.GetLogs(tx.Hash())
 	receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
-
 	return receipt, gas, err
 }

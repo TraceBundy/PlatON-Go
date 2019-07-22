@@ -148,7 +148,7 @@ func newContext(logStream *bytes.Buffer) *exec.VMContext {
 	return &exec.VMContext{
 		Config: exec.VMConfig{
 			EnableJIT:          false,
-			DynamicMemoryPages: 16,
+			DynamicMemoryPages: 1,
 			MaxMemoryPages:     256,
 			MaxTableSize:       65536,
 			MaxValueSlots:      10000,

@@ -33,64 +33,54 @@ var customGenesisTests = []struct {
 		genesis: `{
 			"alloc"      : {},
 			"coinbase"   : "0x0000000000000000000000000000000000000000",
+			"difficulty" : "0x20000",
 			"extraData"  : "",
 			"gasLimit"   : "0x2fefd8",
-			"nonce"      : "0x0376e56dffd12ab53bb149bda4e0cbce2b6aabe4cccc0df0b5a39e12977a2fcd23",
+			"nonce"      : "0x0000000000000042",
+			"mixhash"    : "0x0000000000000000000000000000000000000000000000000000000000000000",
 			"parentHash" : "0x0000000000000000000000000000000000000000000000000000000000000000",
 			"timestamp"  : "0x00"
 		}`,
-		query:  "platon.getBlock(0).nonce",
-		result: "0x0376e56dffd12ab53bb149bda4e0cbce2b6aabe4cccc0df0b5a39e12977a2fcd23000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+		query:  "eth.getBlock(0).nonce",
+		result: "0x0000000000000042",
 	},
-	//Genesis file with only cbft config
+	// Genesis file with an empty chain configuration (ensure missing fields work)
 	{
 		genesis: `{
 			"alloc"      : {},
 			"coinbase"   : "0x0000000000000000000000000000000000000000",
+			"difficulty" : "0x20000",
 			"extraData"  : "",
 			"gasLimit"   : "0x2fefd8",
-			"nonce"      : "0x0376e56dffd12ab53bb149bda4e0cbce2b6aabe4cccc0df0b5a39e12977a2fcd23",
+			"nonce"      : "0x0000000000000042",
+			"mixhash"    : "0x0000000000000000000000000000000000000000000000000000000000000000",
 			"parentHash" : "0x0000000000000000000000000000000000000000000000000000000000000000",
 			"timestamp"  : "0x00",
-			"config"     : {
-               "cbft": {
-                       "initialNodes":  [
-                          "enode://4fcc251cf6bf3ea53a748971a223f5676225ee4380b65c7889a2b491e1551d45fe9fcc19c6af54dcf0d5323b5aa8ee1d919791695082bae1f86dd282dba4150f@127.0.0.1:16701",
-                          "enode://99e82e36db41e81366f644e14943bed70f03494d744a5d4f983387c2128e3fb5f2b8fa1b6555ea8eab81dd96de71cfda11ea8eb5310cefabc34357229e880a00@127.0.0.1:16702",
-                          "enode://2f92a6719fb214667ebc85a12f738dae4d9dfd3b02be251512ab3bc1b240f92a58badc62774e1552f59d97fd5b52be8d182ed941db6f9954be120e680b531adf@127.0.0.1:16703",
-                          "enode://bf9752bb531b9df04dcf869b6b19be56235a1771b19df81a6f874404db903ee360f41925ccfe3e12ca3020e91d10549b745507cd75a12cd327f52972fcc73ce3@127.0.0.1:16704"
-                         ]
-               }}
+			"config"     : {}
 		}`,
-		query:  "platon.getBlock(0).nonce",
-		result: "0xd31d37efa7b9e9d7df775d9a6f9ddb6f5e3d6dd6b87b471b71ed9be9a69b7b871c71cd1d7f46f96b7f5ed76f7bedad9f71ddb7000000000000000000000000000000000000000000000000000000000000",
+		query:  "eth.getBlock(0).nonce",
+		result: "0x0000000000000042",
 	},
-	//Genesis file with specific chain configurations
+	// Genesis file with specific chain configurations
 	{
 		genesis: `{
 			"alloc"      : {},
 			"coinbase"   : "0x0000000000000000000000000000000000000000",
+			"difficulty" : "0x20000",
 			"extraData"  : "",
 			"gasLimit"   : "0x2fefd8",
-			"nonce"      : "0x0376e56dffd12ab53bb149bda4e0cbce2b6aabe4cccc0df0b5a39e12977a2fcd23",
+			"nonce"      : "0x0000000000000042",
+			"mixhash"    : "0x0000000000000000000000000000000000000000000000000000000000000000",
 			"parentHash" : "0x0000000000000000000000000000000000000000000000000000000000000000",
 			"timestamp"  : "0x00",
 			"config"     : {
-               "chainId": 101,
-               "eip155Block": 0,
-               "interpreter":"wasm",
-               "cbft": {
-                       "initialNodes":  [
-                          "enode://4fcc251cf6bf3ea53a748971a223f5676225ee4380b65c7889a2b491e1551d45fe9fcc19c6af54dcf0d5323b5aa8ee1d919791695082bae1f86dd282dba4150f@127.0.0.1:16701",
-                          "enode://99e82e36db41e81366f644e14943bed70f03494d744a5d4f983387c2128e3fb5f2b8fa1b6555ea8eab81dd96de71cfda11ea8eb5310cefabc34357229e880a00@127.0.0.1:16702",
-                          "enode://2f92a6719fb214667ebc85a12f738dae4d9dfd3b02be251512ab3bc1b240f92a58badc62774e1552f59d97fd5b52be8d182ed941db6f9954be120e680b531adf@127.0.0.1:16703",
-                          "enode://bf9752bb531b9df04dcf869b6b19be56235a1771b19df81a6f874404db903ee360f41925ccfe3e12ca3020e91d10549b745507cd75a12cd327f52972fcc73ce3@127.0.0.1:16704"
-                         ]
-               }
+				"homesteadBlock" : 314,
+				"daoForkBlock"   : 141,
+				"daoForkSupport" : true
 			}
 		}`,
-		query:  "platon.getBlock(0).nonce",
-		result: "0xd31d37efa7b9e9d7df775d9a6f9ddb6f5e3d6dd6b87b471b71ed9be9a69b7b871c71cd1d7f46f96b7f5ed76f7bedad9f71ddb7000000000000000000000000000000000000000000000000000000000000",
+		query:  "eth.getBlock(0).nonce",
+		result: "0x0000000000000042",
 	},
 }
 
@@ -114,7 +104,6 @@ func TestCustomGenesis(t *testing.T) {
 			"--datadir", datadir, "--maxpeers", "0", "--port", "0",
 			"--nodiscover", "--nat", "none", "--ipcdisable",
 			"--exec", tt.query, "console")
-		t.Log("testi", i)
 		geth.ExpectRegexp(tt.result)
 		geth.ExpectExit()
 	}

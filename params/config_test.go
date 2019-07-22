@@ -32,17 +32,17 @@ func TestCheckCompatible(t *testing.T) {
 		{stored: AllEthashProtocolChanges, new: AllEthashProtocolChanges, head: 0, wantErr: nil},
 		{stored: AllEthashProtocolChanges, new: AllEthashProtocolChanges, head: 100, wantErr: nil},
 		{
-			stored:  &ChainConfig{EIP155Block: big.NewInt(10)},
-			new:     &ChainConfig{EIP155Block: big.NewInt(20)},
+			stored:  &ChainConfig{EIP150Block: big.NewInt(10)},
+			new:     &ChainConfig{EIP150Block: big.NewInt(20)},
 			head:    9,
 			wantErr: nil,
 		},
 		{
 			stored: AllEthashProtocolChanges,
-			new:    &ChainConfig{EIP155Block: nil},
+			new:    &ChainConfig{HomesteadBlock: nil},
 			head:   3,
 			wantErr: &ConfigCompatError{
-				What:         "EIP155 fork block",
+				What:         "Homestead fork block",
 				StoredConfig: big.NewInt(0),
 				NewConfig:    nil,
 				RewindTo:     0,
@@ -50,13 +50,24 @@ func TestCheckCompatible(t *testing.T) {
 		},
 		{
 			stored: AllEthashProtocolChanges,
-			new:    &ChainConfig{EIP155Block: big.NewInt(1)},
+			new:    &ChainConfig{HomesteadBlock: big.NewInt(1)},
 			head:   3,
 			wantErr: &ConfigCompatError{
-				What:         "EIP155 fork block",
+				What:         "Homestead fork block",
 				StoredConfig: big.NewInt(0),
 				NewConfig:    big.NewInt(1),
 				RewindTo:     0,
+			},
+		},
+		{
+			stored: &ChainConfig{HomesteadBlock: big.NewInt(30), EIP150Block: big.NewInt(10)},
+			new:    &ChainConfig{HomesteadBlock: big.NewInt(25), EIP150Block: big.NewInt(20)},
+			head:   25,
+			wantErr: &ConfigCompatError{
+				What:         "EIP150 fork block",
+				StoredConfig: big.NewInt(10),
+				NewConfig:    big.NewInt(20),
+				RewindTo:     9,
 			},
 		},
 	}

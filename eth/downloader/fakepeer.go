@@ -123,14 +123,18 @@ func (p *FakePeer) RequestHeadersByNumber(number uint64, amount int, skip int, r
 // corresponding to the specified block hashes.
 func (p *FakePeer) RequestBodies(hashes []common.Hash) error {
 	var (
-		txs [][]*types.Transaction
+		txs    [][]*types.Transaction
+		uncles [][]*types.Header
+		signatures [][]*common.BlockConfirmSign
 	)
 	for _, hash := range hashes {
 		block := rawdb.ReadBlock(p.db, hash, *p.hc.GetBlockNumber(hash))
 
 		txs = append(txs, block.Transactions())
+		uncles = append(uncles, block.Uncles())
+		signatures = append(signatures, block.Signatures())
 	}
-	p.dl.DeliverBodies(p.id, txs, nil)
+	p.dl.DeliverBodies(p.id, txs, uncles, signatures)
 	return nil
 }
 
@@ -155,5 +159,9 @@ func (p *FakePeer) RequestNodeData(hashes []common.Hash) error {
 		}
 	}
 	p.dl.DeliverNodeData(p.id, data)
+	return nil
+}
+
+func (p *FakePeer) RequestLatestPposStorage() error {
 	return nil
 }

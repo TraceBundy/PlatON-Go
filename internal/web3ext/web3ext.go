@@ -21,8 +21,9 @@ var Modules = map[string]string{
 	"admin":      Admin_JS,
 	"chequebook": Chequebook_JS,
 	"clique":     Clique_JS,
+	"ethash":     Ethash_JS,
 	"debug":      Debug_JS,
-	"platon":     Platon_JS,
+	"eth":        Eth_JS,
 	"miner":      Miner_JS,
 	"net":        Net_JS,
 	"personal":   Personal_JS,
@@ -109,6 +110,34 @@ web3._extend({
 });
 `
 
+const Ethash_JS = `
+web3._extend({
+	property: 'ethash',
+	methods: [
+		new web3._extend.Method({
+			name: 'getWork',
+			call: 'ethash_getWork',
+			params: 0
+		}),
+		new web3._extend.Method({
+			name: 'getHashrate',
+			call: 'ethash_getHashrate',
+			params: 0
+		}),
+		new web3._extend.Method({
+			name: 'submitWork',
+			call: 'ethash_submitWork',
+			params: 3,
+		}),
+		new web3._extend.Method({
+			name: 'submitHashRate',
+			call: 'ethash_submitHashRate',
+			params: 2,
+		}),
+	]
+});
+`
+
 const Admin_JS = `
 web3._extend({
 	property: 'admin',
@@ -121,6 +150,16 @@ web3._extend({
 		new web3._extend.Method({
 			name: 'removePeer',
 			call: 'admin_removePeer',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'addConsensusPeer',
+			call: 'admin_addConsensusPeer',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'removeConsensusPeer',
+			call: 'admin_removeConsensusPeer',
 			params: 1
 		}),
 		new web3._extend.Method({
@@ -395,58 +434,54 @@ web3._extend({
 			params: 2,
 			inputFormatter:[null, null],
 		}),
-		new web3._extend.Method({
-			name: 'consensusStatus',
-			call: 'debug_consensusStatus',
-		}),
 	],
 	properties: []
 });
 `
 
-const Platon_JS = `
+const Eth_JS = `
 web3._extend({
-	property: 'platon',
+	property: 'eth',
 	methods: [
 		new web3._extend.Method({
 			name: 'setActor',
-			call: 'platon_setActor',
+			call: 'eth_setActor',
 			params: 1,
 			inputFormatter: [web3._extend.formatters.inputAddressFormatter]
 		}),
 		new web3._extend.Method({
 			name: 'sign',
-			call: 'platon_sign',
+			call: 'eth_sign',
 			params: 2,
 			inputFormatter: [web3._extend.formatters.inputAddressFormatter, null]
 		}),
 		new web3._extend.Method({
 			name: 'resend',
-			call: 'platon_resend',
+			call: 'eth_resend',
 			params: 3,
 			inputFormatter: [web3._extend.formatters.inputTransactionFormatter, web3._extend.utils.fromDecimal, web3._extend.utils.fromDecimal]
 		}),
 		new web3._extend.Method({
 			name: 'signTransaction',
-			call: 'platon_signTransaction',
+			call: 'eth_signTransaction',
 			params: 1,
 			inputFormatter: [web3._extend.formatters.inputTransactionFormatter]
 		}),
 		new web3._extend.Method({
 			name: 'submitTransaction',
-			call: 'platon_submitTransaction',
+			call: 'eth_submitTransaction',
 			params: 1,
 			inputFormatter: [web3._extend.formatters.inputTransactionFormatter]
 		}),
 		new web3._extend.Method({
 			name: 'getRawTransaction',
-			call: 'platon_getRawTransactionByHash',
+			call: 'eth_getRawTransactionByHash',
 			params: 1
 		}),
 		new web3._extend.Method({
 			name: 'getRawTransactionFromBlock',
 			call: function(args) {
-				return (web3._extend.utils.isString(args[0]) && args[0].indexOf('0x') === 0) ? 'platon_getRawTransactionByBlockHashAndIndex' : 'platon_getRawTransactionByBlockNumberAndIndex';
+				return (web3._extend.utils.isString(args[0]) && args[0].indexOf('0x') === 0) ? 'eth_getRawTransactionByBlockHashAndIndex' : 'eth_getRawTransactionByBlockNumberAndIndex';
 			},
 			params: 2,
 			inputFormatter: [web3._extend.formatters.inputBlockNumberFormatter, web3._extend.utils.toHex]
@@ -455,7 +490,7 @@ web3._extend({
 	properties: [
 		new web3._extend.Property({
 			name: 'pendingTransactions',
-			getter: 'platon_pendingTransactions',
+			getter: 'eth_pendingTransactions',
 			outputFormatter: function(txs) {
 				var formatted = [];
 				for (var i = 0; i < txs.length; i++) {
@@ -474,10 +509,40 @@ web3._extend({
 	property: 'miner',
 	methods: [
 		new web3._extend.Method({
+			name: 'start',
+			call: 'miner_start',
+			params: 1,
+			inputFormatter: [null]
+		}),
+		new web3._extend.Method({
+			name: 'stop',
+			call: 'miner_stop'
+		}),
+		new web3._extend.Method({
+			name: 'setEtherbase',
+			call: 'miner_setEtherbase',
+			params: 1,
+			inputFormatter: [web3._extend.formatters.inputAddressFormatter]
+		}),
+		new web3._extend.Method({
+			name: 'setExtra',
+			call: 'miner_setExtra',
+			params: 1
+		}),
+		new web3._extend.Method({
 			name: 'setGasPrice',
 			call: 'miner_setGasPrice',
 			params: 1,
 			inputFormatter: [web3._extend.utils.fromDecimal]
+		}),
+		new web3._extend.Method({
+			name: 'setRecommitInterval',
+			call: 'miner_setRecommitInterval',
+			params: 1,
+		}),
+		new web3._extend.Method({
+			name: 'getHashrate',
+			call: 'miner_getHashrate'
 		}),
 	],
 	properties: []

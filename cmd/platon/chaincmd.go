@@ -19,9 +19,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/PlatONnetwork/PlatON-Go/consensus"
-	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft"
-	"github.com/PlatONnetwork/PlatON-Go/miner"
 	"os"
 	"runtime"
 	"strconv"
@@ -136,6 +133,7 @@ The export-preimages command export hash preimages to an RLP encoded stream`,
 			utils.DataDirFlag,
 			utils.CacheFlag,
 			utils.SyncModeFlag,
+			utils.FakePoWFlag,
 			utils.TestnetFlag,
 			utils.BetanetFlag,
 			utils.InnerTestnetFlag,
@@ -209,46 +207,13 @@ func initGenesis(ctx *cli.Context) error {
 	return nil
 }
 
-type FakeBackend struct {
-	bc *core.BlockChain
-}
-
-func (f *FakeBackend) BlockChain() *core.BlockChain {
-	return f.bc
-}
-
-func (f *FakeBackend) TxPool() *core.TxPool {
-	return nil
-}
-
 func importChain(ctx *cli.Context) error {
 	if len(ctx.Args()) < 1 {
 		utils.Fatalf("This command requires an argument.")
 	}
-	// todo:
-	stack, gethConfig := makeFullNodeForCBFT(ctx)
-	chain, chainDb := utils.MakeChainForCBFT(ctx, stack, &gethConfig.Eth, &gethConfig.Node)
+	stack := makeFullNode(ctx)
+	chain, chainDb := utils.MakeChain(ctx, stack)
 	defer chainDb.Close()
-	if c, ok := chain.Engine().(*cbft.Cbft); ok {
-		blockChainCache := core.NewBlockChainCache(chain)
-		var agency consensus.Agency //cbft.NewStaticAgency(chain.Config().Cbft.InitialNodes)
-		// init worker
-		bc := &FakeBackend{bc: chain}
-
-		config := gethConfig.Eth
-		minningConfig := &core.MiningConfig{MiningLogAtDepth: config.MiningLogAtDepth, TxChanSize: config.TxChanSize,
-			ChainHeadChanSize: config.ChainHeadChanSize, ChainSideChanSize: config.ChainSideChanSize,
-			ResultQueueSize: config.ResultQueueSize, ResubmitAdjustChanSize: config.ResubmitAdjustChanSize,
-			MinRecommitInterval: config.MinRecommitInterval, MaxRecommitInterval: config.MaxRecommitInterval,
-			IntervalAdjustRatio: config.IntervalAdjustRatio, IntervalAdjustBias: config.IntervalAdjustBias,
-			StaleThreshold: config.StaleThreshold, DefaultCommitRatio: config.DefaultCommitRatio,
-		}
-
-		miner := miner.New(bc, chain.Config(), minningConfig, stack.EventMux(), c, gethConfig.Eth.MinerRecommit, gethConfig.Eth.MinerGasFloor, gethConfig.Eth.MinerGasCeil, nil, blockChainCache)
-		c.Start(chain, nil, nil, agency)
-		defer c.Close()
-		defer miner.Stop()
-	}
 
 	// Start periodically gathering memory profiles
 	var peakMemAlloc, peakMemSys uint64
@@ -492,7 +457,7 @@ func dump(ctx *cli.Context) error {
 			fmt.Println("{}")
 			utils.Fatalf("block not found")
 		} else {
-			state, err := state.New(block.Root(), state.NewDatabase(chainDb))
+			state, err := state.New(block.Root(), state.NewDatabase(chainDb), block.Number(), block.Hash())
 			if err != nil {
 				utils.Fatalf("could not create new state: %v", err)
 			}

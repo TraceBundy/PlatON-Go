@@ -18,7 +18,6 @@ package eth
 
 import (
 	"context"
-	"github.com/PlatONnetwork/PlatON-Go/consensus"
 	"math/big"
 
 	"github.com/PlatONnetwork/PlatON-Go/accounts"
@@ -47,9 +46,6 @@ type EthAPIBackend struct {
 // ChainConfig returns the active chain configuration.
 func (b *EthAPIBackend) ChainConfig() *params.ChainConfig {
 	return b.eth.chainConfig
-}
-func (b *EthAPIBackend) Engine() consensus.Engine {
-	return b.eth.engine
 }
 
 func (b *EthAPIBackend) CurrentBlock() *types.Block {
@@ -102,7 +98,7 @@ func (b *EthAPIBackend) StateAndHeaderByNumber(ctx context.Context, blockNr rpc.
 	if header == nil || err != nil {
 		return nil, nil, err
 	}
-	stateDb, err := b.eth.BlockChain().StateAt(header.Root)
+	stateDb, err := b.eth.BlockChain().StateAt(header.Root, header.Number, header.Hash())
 	return stateDb, header, err
 }
 

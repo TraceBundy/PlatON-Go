@@ -101,6 +101,7 @@ var Flags = []cli.Flag{
 	pprofFlag, pprofAddrFlag, pprofPortFlag,
 	memprofilerateFlag, blockprofilerateFlag, cpuprofileFlag, traceFlag,
 	wasmLogFileFlag,
+
 }
 
 var (

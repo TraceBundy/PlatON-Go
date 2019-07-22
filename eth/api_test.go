@@ -17,13 +17,21 @@
 package eth
 
 import (
+	"math/big"
+	"reflect"
 	"testing"
+
+	"github.com/davecgh/go-spew/spew"
+	"github.com/PlatONnetwork/PlatON-Go/common"
+	"github.com/PlatONnetwork/PlatON-Go/core/state"
+	"github.com/PlatONnetwork/PlatON-Go/ethdb"
 )
+
+var dumper = spew.ConfigState{Indent: "    "}
 
 func TestStorageRangeAt(t *testing.T) {
 	// Create a state where account 0x010000... has a few storage entries.
-	// TODO test
-	/*var (
+	var (
 		state, _ = state.New(common.Hash{}, state.NewDatabase(ethdb.NewMemDatabase()), big.NewInt(0), common.Hash{})
 		addr     = common.Address{0x01}
 		keys     = []common.Hash{ // hashes of Keys of storage
@@ -40,7 +48,7 @@ func TestStorageRangeAt(t *testing.T) {
 		}
 	)
 	for _, entry := range storage {
-		state.SetState(addr, entry.Key.Bytes(), entry.Value.Bytes())
+		state.SetState(addr, *entry.Key, entry.Value)
 	}
 
 	// Check a few combinations of limit and start/end.
@@ -79,5 +87,5 @@ func TestStorageRangeAt(t *testing.T) {
 			t.Fatalf("wrong result for range 0x%x.., limit %d:\ngot %s\nwant %s",
 				test.start, test.limit, dumper.Sdump(result), dumper.Sdump(&test.want))
 		}
-	}*/
+	}
 }

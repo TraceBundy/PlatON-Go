@@ -53,7 +53,7 @@ func (self *StateDB) RawDump() Dump {
 			panic(err)
 		}
 
-		obj := self.getStateObject(common.BytesToAddress(addr))
+		obj := newObject(nil, common.BytesToAddress(addr), data)
 		account := DumpAccount{
 			Balance:  data.Balance.String(),
 			Nonce:    data.Nonce,

@@ -117,10 +117,11 @@ type stateObject struct {
 
 // empty returns whether the account is considered empty.
 func (s *stateObject) empty() bool {
-	if _, ok := vm.PlatONPrecompiledContracts[s.address]; ok {
+	if _, ok := vm.PrecompiledContractsPpos[s.address]; ok {
 		return s.data.Nonce == 0 && s.data.Balance.Sign() == 0 && bytes.Equal(s.data.CodeHash, emptyCodeHash) && s.data.Root == (common.Hash{})
+	} else {
+		return s.data.Nonce == 0 && s.data.Balance.Sign() == 0 && bytes.Equal(s.data.CodeHash, emptyCodeHash)
 	}
-	return s.data.Nonce == 0 && s.data.Balance.Sign() == 0 && bytes.Equal(s.data.CodeHash, emptyCodeHash)
 }
 
 // Account is the Ethereum consensus representation of accounts.
@@ -130,11 +131,12 @@ type Account struct {
 	Balance  *big.Int
 	Root     common.Hash // merkle root of the storage trie
 	CodeHash []byte
-	AbiHash  []byte
+	AbiHash []byte
 }
 
 // newObject creates a state object.
 func newObject(db *StateDB, address common.Address, data Account) *stateObject {
+	log.Debug("newObject", "state db addr", fmt.Sprintf("%p", db), "state root", db.Root().Hex())
 	if data.Balance == nil {
 		data.Balance = new(big.Int)
 	}
@@ -245,7 +247,7 @@ func (self *stateObject) GetState(db Database, keyTree string) []byte {
 
 // GetCommittedState retrieves a value from the committed account storage trie.
 func (self *stateObject) GetCommittedState(db Database, key string) []byte {
-	value := make([]byte, 0)
+	var value []byte
 	// If we have the original value cached, return that
 	valueKey, cached := self.originStorage[key]
 	if cached {
@@ -254,7 +256,10 @@ func (self *stateObject) GetCommittedState(db Database, key string) []byte {
 			return value
 		}
 	}
-
+	log.Debug("GetCommittedState", "stateObject addr", fmt.Sprintf("%p", self), "statedb addr", fmt.Sprintf("%p", self.db), "root", self.data.Root, "key", hex.EncodeToString([]byte(key)))
+	//if self.data.Root == (common.Hash{}) {
+	//	log.Info("GetCommittedState", "stack", string(debug.Stack()))
+	//}
 	// Otherwise load the valueKey from trie
 	enc, err := self.getTrie(db).TryGet([]byte(key))
 	if err != nil {
