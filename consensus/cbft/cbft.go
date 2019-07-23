@@ -234,7 +234,9 @@ func (cbft *Cbft) receiveLoop() {
 		}
 
 		// read-only channel
-		select {}
+		select {
+		default:
+		}
 	}
 }
 
@@ -530,6 +532,7 @@ func (cbft *Cbft) ConsensusNodes() ([]discover.NodeID, error) {
 func (cbft *Cbft) ShouldSeal(curTime time.Time) (bool, error) {
 	currentExecutedBlockNumber := cbft.state.HighestExecutedBlock().NumberU64()
 	if !cbft.validatorPool.IsValidator(currentExecutedBlockNumber, cbft.config.Sys.NodeID) {
+		cbft.log.Warn("Current node not a validator")
 		return false, errors.New("current node not a validator")
 	}
 
@@ -539,9 +542,11 @@ func (cbft *Cbft) ShouldSeal(curTime time.Time) (bool, error) {
 	}
 	select {
 	case err := <-result:
+		cbft.log.Trace("Should seal", "curTime", curTime, "seal", err == nil, "err", err)
 		return err == nil, err
 	case <-time.After(2 * time.Millisecond):
 		result <- errors.New("timeout")
+		cbft.log.Trace("Should seal", "curTime", curTime, "seal", false, "err", "CBFT engine busy")
 		return false, errors.New("CBFT engine busy")
 	}
 }
@@ -562,7 +567,12 @@ func (cbft *Cbft) OnShouldSeal(result chan error) {
 
 	numValidators := cbft.validatorPool.Len(currentExecutedBlockNumber)
 	currentProposer := cbft.state.ViewNumber() % uint64(numValidators)
-	validator, _ := cbft.validatorPool.GetValidatorByNodeID(currentExecutedBlockNumber, cbft.config.Sys.NodeID)
+	validator, err := cbft.validatorPool.GetValidatorByNodeID(currentExecutedBlockNumber, cbft.config.Sys.NodeID)
+	if err != nil {
+		cbft.log.Error("Should seal fail", "err", err)
+		result <- err
+		return
+	}
 	if currentProposer != uint64(validator.Index) {
 		result <- errors.New("current node not the proposer")
 		return
@@ -611,11 +621,12 @@ func (cbft *Cbft) GetBlockWithoutLock(hash common.Hash, number uint64) *types.Bl
 }
 
 func (Cbft) SetPrivateKey(privateKey *ecdsa.PrivateKey) {
-	panic("implement me")
+	//panic("implement me")
 }
 
 func (Cbft) IsSignedBySelf(sealHash common.Hash, signature []byte) bool {
-	panic("implement me")
+	//panic("implement me")
+	return true
 }
 
 func (Cbft) TracingSwitch(flag int8) {
@@ -623,7 +634,7 @@ func (Cbft) TracingSwitch(flag int8) {
 }
 
 func (cbft *Cbft) OnPong(nodeID discover.NodeID, netLatency int64) error {
-	panic("need to be improved")
+	//panic("need to be improved")
 	return nil
 }
 
