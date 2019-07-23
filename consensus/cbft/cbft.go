@@ -257,7 +257,20 @@ func (cbft *Cbft) Author(header *types.Header) (common.Address, error) {
 }
 
 func (cbft *Cbft) VerifyHeader(chain consensus.ChainReader, header *types.Header, seal bool) error {
-	return cbft.validatorPool.VerifyHeader(header)
+	if header.Number == nil {
+		cbft.log.Error("Verify header fail, unknown block")
+		return errors.New("unknown block")
+	}
+
+	cbft.log.Trace("Verify header", "number", header.Number, "hash", header.Hash, "seal", seal)
+	if len(header.Extra) < consensus.ExtraSeal {
+		cbft.log.Error("Verify header fail, missing signature", "number", header.Number, "hash", header.Hash)
+	}
+
+	if err := cbft.validatorPool.VerifyHeader(header); err != nil {
+		cbft.log.Error("Verify header fail", "number", header.Number, "hash", header.Hash(), "err", err)
+	}
+	return nil
 }
 
 func (Cbft) VerifyHeaders(chain consensus.ChainReader, headers []*types.Header, seals []bool) (chan<- struct{}, <-chan error) {
