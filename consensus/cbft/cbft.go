@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
+
 	errors2 "github.com/pkg/errors"
 
 	"errors"
@@ -61,7 +62,7 @@ type Cbft struct {
 
 	fetcher *fetcher.Fetcher
 	// Control the current view state
-	state cstate.ViewState
+	state *cstate.ViewState
 
 	// Block asyncExecutor, the block responsible for executing the current view
 	asyncExecutor executor.AsyncBlockExecutor
@@ -96,6 +97,7 @@ func New(sysConfig *params.CbftConfig, optConfig *ctypes.OptionsConfig, eventMux
 		fetching:           false,
 		asyncCallCh:        make(chan func(), optConfig.PeerMsgQueueSize),
 		nodeServiceContext: ctx,
+		state:              cstate.NewViewState(),
 	}
 
 	if evPool, err := evidence.NewEvidencePool(ctx); err == nil {
@@ -105,8 +107,8 @@ func New(sysConfig *params.CbftConfig, optConfig *ctypes.OptionsConfig, eventMux
 	}
 
 	//todo init safety rules, vote rules, state, asyncExecutor
-	cbft.safetyRules = rules.NewSafetyRules(&cbft.state, &cbft.blockTree)
-	cbft.voteRules = rules.NewVoteRules(&cbft.state)
+	cbft.safetyRules = rules.NewSafetyRules(cbft.state, cbft.blockTree)
+	cbft.voteRules = rules.NewVoteRules(cbft.state)
 
 	return cbft
 }
@@ -226,8 +228,8 @@ func (cbft *Cbft) receiveLoop() {
 		case fn := <-cbft.asyncCallCh:
 			fn()
 
-		case <-cbft.state.ViewTimeout():
-			cbft.OnViewTimeout()
+		//case <-cbft.state.ViewTimeout():
+		//	cbft.OnViewTimeout()
 		default:
 		}
 
@@ -429,7 +431,7 @@ func (Cbft) APIs(chain consensus.ChainReader) []rpc.API {
 }
 
 func (cbft *Cbft) Protocols() []p2p.Protocol {
-	panic("implement me")
+	return []p2p.Protocol{}
 }
 
 func (cbft *Cbft) NextBaseBlock() *types.Block {
