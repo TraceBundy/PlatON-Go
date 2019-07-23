@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"encoding/json"
+	"fmt"
+	errors2 "github.com/pkg/errors"
 
 	"errors"
 	"reflect"
@@ -51,6 +53,7 @@ type Cbft struct {
 	log              log.Logger
 	network          *network.EngineManager
 
+	start    bool
 	syncing  bool
 	fetching bool
 	// Async call channel
@@ -73,7 +76,7 @@ type Cbft struct {
 	validatorPool *validator.ValidatorPool
 
 	// Store blocks that are not committed
-	blockTree ctypes.BlockTree
+	blockTree *ctypes.BlockTree
 
 	// wal
 	nodeServiceContext *node.ServiceContext
@@ -88,6 +91,7 @@ func New(sysConfig *params.CbftConfig, optConfig *ctypes.OptionsConfig, eventMux
 		peerMsgCh:          make(chan *ctypes.MsgInfo, optConfig.PeerMsgQueueSize),
 		syncMsgCh:          make(chan *ctypes.MsgInfo, optConfig.PeerMsgQueueSize),
 		log:                log.New(),
+		start:              false,
 		syncing:            false,
 		fetching:           false,
 		asyncCallCh:        make(chan func(), optConfig.PeerMsgQueueSize),
@@ -121,7 +125,21 @@ func (cbft *Cbft) Start(chain consensus.ChainReader, blockCacheWriter consensus.
 	//Initialize block tree
 	block := chain.GetBlock(chain.CurrentHeader().Hash(), chain.CurrentHeader().Number.Uint64())
 
-	cbft.blockTree.InsertQCBlock(block, nil)
+	isGenesis := func() bool {
+		return block.NumberU64() == 0
+	}
+
+	var qc *ctypes.QuorumCert
+	if !isGenesis() {
+		var err error
+		_, qc, err = ctypes.DecodeExtra(block.ExtraData())
+
+		if err != nil {
+			return errors2.Wrap(err, fmt.Sprintf("start cbft failed"))
+		}
+	}
+
+	cbft.blockTree = ctypes.NewBlockTree(block, qc)
 
 	//Initialize view state
 	cbft.state.SetHighestExecutedBlock(block)
@@ -143,6 +161,7 @@ func (cbft *Cbft) Start(chain consensus.ChainReader, blockCacheWriter consensus.
 	// Start the handler to process the message.
 	go cbft.network.Start()
 
+	cbft.start = true
 	return nil
 }
 
@@ -429,10 +448,14 @@ func (Cbft) InsertChain(block *types.Block, errCh chan error) {
 
 // HashBlock check if the specified block exists in block tree.
 func (cbft *Cbft) HasBlock(hash common.Hash, number uint64) bool {
-	if cbft.state.HighestExecutedBlock().NumberU64() >= number {
-		return true
-	}
-	return false
+	has := false
+	cbft.checkStart(func() {
+		if cbft.state.HighestExecutedBlock().NumberU64() >= number {
+			has = true
+		}
+	})
+
+	return has
 }
 
 func (Cbft) Status() string {
@@ -451,7 +474,17 @@ func (cbft *Cbft) GetBlockByHash(hash common.Hash) *types.Block {
 
 // CurrentBlock get the current lock block.
 func (cbft *Cbft) CurrentBlock() *types.Block {
-	return cbft.state.HighestLockBlock()
+	var block *types.Block
+	cbft.checkStart(func() {
+		block = cbft.state.HighestLockBlock()
+	})
+	return block
+}
+
+func (cbft *Cbft) checkStart(exe func()) {
+	if cbft.start {
+		exe()
+	}
 }
 
 func (cbft *Cbft) FastSyncCommitHead() <-chan error {
@@ -473,6 +506,7 @@ func (cbft *Cbft) FastSyncCommitHead() <-chan error {
 
 func (cbft *Cbft) Close() error {
 	cbft.log.Info("Close cbft consensus")
+	cbft.start = false
 	cbft.closeOnce.Do(func() {
 		// Short circuit if the exit channel is not allocated.
 		if cbft.exitCh == nil {
