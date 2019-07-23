@@ -222,6 +222,8 @@ func newWorker(config *params.ChainConfig, miningConfig *core.MiningConfig, engi
 	worker.commitDuration = int64((float64)(recommit.Nanoseconds()/1e6) * miningConfig.DefaultCommitRatio)
 	log.Info("commitDuration in Millisecond", "commitDuration", worker.commitDuration)
 
+	worker.commitWorkEnv.nextBlockTime.Store(time.Now())
+
 	go worker.mainLoop()
 	go worker.newWorkLoop(recommit)
 	go worker.resultLoop()
@@ -994,6 +996,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, 
 	defer func() {
 		if engine, ok := w.engine.(consensus.Bft); ok {
 			w.commitWorkEnv.nextBlockTime.Store(engine.CalcNextBlockTime(common.MillisToTime(timestamp)))
+			log.Debug("Next block time", "time", w.commitWorkEnv.nextBlockTime.Load().(time.Time))
 		}
 	}()
 
