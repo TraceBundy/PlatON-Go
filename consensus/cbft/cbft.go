@@ -36,6 +36,7 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/p2p/discover"
 	"github.com/PlatONnetwork/PlatON-Go/params"
 	"github.com/PlatONnetwork/PlatON-Go/rpc"
+	"github.com/PlatONnetwork/PlatON-Go/crypto"
 )
 
 const cbftVersion = 1
@@ -388,7 +389,7 @@ func (cbft *Cbft) OnSeal(block *types.Block, results chan<- *types.Block, stop <
 
 	// TODO: add viewchange qc
 
-	cbft.signMsg(prepareBlock)
+	cbft.signMsgByBls(prepareBlock)
 
 	cbft.state.AddPrepareBlock(prepareBlock)
 	cbft.state.SetHighestExecutedBlock(block)
@@ -689,4 +690,29 @@ func (cbft *Cbft) Evidences() string {
 
 func (cbft *Cbft) UnmarshalEvidence(data []byte) (cconsensus.Evidences, error) {
 	return cbft.evPool.UnmarshalEvidence(data)
+}
+
+// signFn use private key to sign byte slice.
+func (cbft *Cbft) signFn(m []byte) ([]byte, error) {
+	return crypto.Sign(m, cbft.config.Option.NodePriKey)
+}
+
+// signFn use bls private key to sign byte slice.
+func (cbft *Cbft) signFnByBls(m []byte) ([]byte, error) {
+	// TODO: really signature
+	return []byte{}, nil
+}
+
+// signMsg use bls private key to sign msg.
+func (cbft *Cbft) signMsgByBls(msg ctypes.ConsensusMsg) error {
+	buf, err := msg.CannibalizeBytes()
+	if err != nil {
+		return err
+	}
+	sign, err := cbft.signFnByBls(buf)
+	if err != nil {
+		return err
+	}
+	msg.SetSign(sign)
+	return nil
 }
