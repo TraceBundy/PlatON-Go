@@ -121,6 +121,7 @@ func (cbft *Cbft) Start(chain consensus.ChainReader, blockCacheWriter consensus.
 	cbft.asyncExecutor = executor.NewAsyncExecutor(blockCacheWriter.Execute)
 	cbft.validatorPool = validator.NewValidatorPool(agency, chain.CurrentHeader().Number.Uint64(), cbft.config.Option.NodeID)
 
+	cbft.state = cstate.NewViewState()
 	//Initialize block tree
 	block := chain.GetBlock(chain.CurrentHeader().Hash(), chain.CurrentHeader().Number.Uint64())
 
@@ -139,6 +140,7 @@ func (cbft *Cbft) Start(chain consensus.ChainReader, blockCacheWriter consensus.
 	}
 
 	cbft.blockTree = ctypes.NewBlockTree(block, qc)
+	cbft.changeView(qc.Epoch, qc.ViewNumber, block, qc, nil)
 
 	//Initialize view state
 	cbft.state.SetHighestExecutedBlock(block)
@@ -391,24 +393,10 @@ func (cbft *Cbft) OnSeal(block *types.Block, results chan<- *types.Block, stop <
 
 	cbft.signMsgByBls(prepareBlock)
 
-	cbft.state.AddPrepareBlock(prepareBlock)
+	cbft.OnPrepareBlock("", prepareBlock)
+	cbft.signBlock(block.Hash(), block.NumberU64(), prepareBlock.BlockIndex)
+
 	cbft.state.SetHighestExecutedBlock(block)
-
-	// TODO: single node process
-	if cbft.validatorPool.Len(cbft.state.HighestQCBlock().NumberU64()) == 1 {
-		cbft.state.SetHighestQCBlock(block)
-		cbft.state.SetHighestLockBlock(block)
-
-		qc := &ctypes.QuorumCert{
-			Epoch:       prepareBlock.Epoch,
-			ViewNumber:  prepareBlock.ViewNumber,
-			BlockHash:   prepareBlock.Block.Hash(),
-			BlockNumber: prepareBlock.Block.NumberU64(),
-			BlockIndex:  prepareBlock.BlockIndex,
-		}
-		cbft.commitBlock(block, qc)
-		cbft.state.SetHighestCommitBlock(block)
-	}
 
 	cbft.network.Broadcast(prepareBlock)
 
@@ -658,6 +646,10 @@ func (cbft *Cbft) HighestLockBlockBn() uint64 {
 // Return the highest QC block number of the current node.
 func (cbft *Cbft) HighestQCBlockBn() uint64 {
 	return cbft.state.HighestQCBlock().NumberU64()
+}
+
+func (cbft *Cbft) threshold(num int) int {
+	return num - (num-1)/3
 }
 
 func (cbft *Cbft) commitBlock(block *types.Block, qc *ctypes.QuorumCert) {
