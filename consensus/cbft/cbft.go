@@ -541,11 +541,9 @@ func (cbft *Cbft) ShouldSeal(curTime time.Time) (bool, error) {
 	}
 	select {
 	case err := <-result:
-		cbft.log.Trace("Should seal", "curTime", curTime, "seal", err == nil, "err", err)
 		return err == nil, err
 	case <-time.After(2 * time.Millisecond):
 		result <- errors.New("timeout")
-		cbft.log.Trace("Should seal", "curTime", curTime, "seal", false, "err", "CBFT engine busy")
 		return false, errors.New("CBFT engine busy")
 	}
 }
@@ -596,10 +594,11 @@ func (cbft *Cbft) CalcNextBlockTime(blockTime time.Time) time.Time {
 	produceInterval := time.Duration(cbft.config.Sys.Period/uint64(cbft.config.Sys.Amount)) * time.Millisecond
 	cbft.log.Debug("Calc next block time",
 		"blockTime", blockTime, "now", time.Now(), "produceInterval", produceInterval,
-		"period", cbft.config.Sys.Period, "amount", cbft.config.Sys.Amount)
-	if time.Now().Sub(blockTime)*time.Millisecond < produceInterval {
+		"period", cbft.config.Sys.Period, "amount", cbft.config.Sys.Amount,
+		"interval", time.Since(blockTime))
+	if time.Since(blockTime) < produceInterval {
 		// TODO: add network latency
-		return time.Now().Add(time.Now().Sub(blockTime))
+		return time.Now().Add(produceInterval - time.Since(blockTime))
 	}
 	return time.Now()
 }
