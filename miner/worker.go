@@ -330,7 +330,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 		interrupt = new(int32)
 		log.Debug("Begin to commit new worker", "baseBlockHash", baseBlock.Hash(), "baseBlockNumber", baseBlock.Number(), "timestamp", common.Millis(timestamp), "deadline", common.Millis(blockDeadline), "deadlineDuration", blockDeadline.Sub(timestamp))
 		w.newWorkCh <- &newWorkReq{interrupt: interrupt, noempty: noempty, timestamp: timestamp, blockDeadline: blockDeadline, commitBlock: baseBlock}
-		timer.Reset(blockDeadline.Sub(timestamp) * time.Millisecond)
+		timer.Reset(blockDeadline.Sub(timestamp))
 		atomic.StoreInt32(&w.newTxs, 0)
 	}
 	// recalcRecommit recalculates the resubmitting interval upon feedback.
@@ -408,14 +408,16 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			// higher priced transactions. Disable this overhead for pending blocks.
 			timestamp = time.Now()
 			status := atomic.LoadInt32(&w.commitWorkEnv.commitStatus)
-			if w.isRunning() && status == commitStatusIdle {
+			if w.isRunning() {
 				if cbftEngine, ok := w.engine.(consensus.Bft); ok {
-					if shouldSeal, err := cbftEngine.ShouldSeal(timestamp); err == nil {
-						if shouldSeal {
-							if shouldCommit, commitBlock := w.shouldCommit(timestamp); shouldCommit {
-								log.Debug("begin to package new block regularly ")
-								blockDeadline := w.engine.(consensus.Bft).CalcBlockDeadline(timestamp)
-								commit(false, commitInterruptResubmit, commitBlock, blockDeadline)
+					if status == commitStatusIdle {
+						if shouldSeal, err := cbftEngine.ShouldSeal(timestamp); err == nil {
+							if shouldSeal {
+								if shouldCommit, commitBlock := w.shouldCommit(timestamp); shouldCommit {
+									log.Debug("begin to package new block regularly ")
+									blockDeadline := w.engine.(consensus.Bft).CalcBlockDeadline(timestamp)
+									commit(false, commitInterruptResubmit, commitBlock, blockDeadline)
+								}
 							}
 						}
 					}
