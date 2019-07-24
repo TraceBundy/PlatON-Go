@@ -577,6 +577,7 @@ func (cbft *Cbft) OnShouldSeal(result chan error) {
 
 func (cbft *Cbft) CalcBlockDeadline(timePoint time.Time) time.Time {
 	produceInterval := time.Duration(cbft.config.Sys.Period/uint64(cbft.config.Sys.Amount)) * time.Millisecond
+	cbft.log.Debug("Calc block deadline", "timePoint", timePoint, "stateDeadline", cbft.state.Deadline(), "produceInterval", produceInterval)
 	if cbft.state.Deadline().Sub(timePoint) > produceInterval {
 		return timePoint.Add(produceInterval)
 	}
