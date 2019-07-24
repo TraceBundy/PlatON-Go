@@ -84,6 +84,11 @@ type Cbft struct {
 	// wal
 	nodeServiceContext *node.ServiceContext
 	wal                wal.Wal
+	stateMu            sync.Mutex
+	viewMu             sync.Mutex
+
+	// Record the number of peer requests for obtaining cbft information.
+	queues map[string]int // Per peer message counts to prevent memory exhaustion.
 }
 
 func New(sysConfig *params.CbftConfig, optConfig *ctypes.OptionsConfig, eventMux *event.TypeMux, ctx *node.ServiceContext) *Cbft {
@@ -99,6 +104,7 @@ func New(sysConfig *params.CbftConfig, optConfig *ctypes.OptionsConfig, eventMux
 		fetching:           false,
 		asyncCallCh:        make(chan func(), optConfig.PeerMsgQueueSize),
 		nodeServiceContext: ctx,
+		queues:             make(map[string]int),
 		state:              cstate.NewViewState(),
 	}
 
@@ -227,7 +233,24 @@ func (cbft *Cbft) receiveLoop() {
 	for {
 		select {
 		case msg := <-cbft.peerMsgCh:
+
+			// Prevent Dos attacks and limit the number of messages sent by each node.
+			count := cbft.queues[msg.PeerID] + 1
+			if int64(count) > cbft.config.Option.MaxQueuesLimit {
+				log.Error("Discarded message, exceeded allowance for the layer of cbft", "peer", msg.PeerID, "msgHash", msg.Msg.MsgHash().TerminalString())
+				// Need further confirmation.
+				// todo: Is the program exiting or dropping the message here?
+				break
+			}
+			cbft.queues[msg.PeerID] = count
 			cbft.handleConsensusMsg(msg)
+			// After the message is processed, the counter is decremented by one.
+			// If it is reduced to 0, the mapping relationship of the corresponding
+			// node will be deleted.
+			cbft.queues[msg.PeerID]--
+			if cbft.queues[msg.PeerID] == 0 {
+				delete(cbft.queues, msg.PeerID)
+			}
 
 		case msg := <-cbft.syncMsgCh:
 			cbft.handleSyncMsg(msg)
@@ -255,6 +278,9 @@ func (cbft *Cbft) handleConsensusMsg(info *ctypes.MsgInfo) {
 	}
 	msg, id := info.Msg, info.PeerID
 	var err error
+
+	// Forward the message before processing the message.
+	go cbft.network.Forwarding(id, msg)
 
 	switch msg := msg.(type) {
 	case *protocols.PrepareBlock:
@@ -403,12 +429,15 @@ func (cbft *Cbft) OnSeal(block *types.Block, results chan<- *types.Block, stop <
 		prepareBlock.PrepareQC = parentQC
 	}
 
-	// TODO: add viewchange qc
+	cbft.log.Info("Seal New Block", "prepareBlock", prepareBlock.String())
 
+	// TODO: signature block - fake verify.
 	cbft.signMsgByBls(prepareBlock)
 
+	cbft.state.SetExecuting(prepareBlock.BlockIndex, true)
 	cbft.OnPrepareBlock("", prepareBlock)
 	cbft.signBlock(block.Hash(), block.NumberU64(), prepareBlock.BlockIndex)
+	cbft.findQCBlock()
 
 	cbft.state.SetHighestExecutedBlock(block)
 
@@ -538,7 +567,7 @@ func (cbft *Cbft) ShouldSeal(curTime time.Time) (bool, error) {
 		return false, errors.New("current node not a validator")
 	}
 
-	result := make(chan error, 1)
+	result := make(chan error, 2)
 	cbft.asyncCallCh <- func() {
 		cbft.OnShouldSeal(result)
 	}
@@ -552,6 +581,7 @@ func (cbft *Cbft) ShouldSeal(curTime time.Time) (bool, error) {
 }
 
 func (cbft *Cbft) OnShouldSeal(result chan error) {
+	// todo: need add remark.
 	select {
 	case <-result:
 		cbft.log.Trace("Should seal timeout")
