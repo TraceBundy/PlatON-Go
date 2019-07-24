@@ -98,7 +98,13 @@ func (vn *ValidateNode) String() string {
 }
 
 func (vn *ValidateNode) Verify(data, sign []byte) bool {
-	return true
+	var sig bls.Sign
+	err := sig.Deserialize(sign)
+	if err != nil {
+		return false
+	}
+
+	return sig.Verify(vn.BlsPubKey, string(data))
 }
 
 func (vnm ValidateNodeMap) String() string {
