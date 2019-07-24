@@ -6,7 +6,6 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/common"
 	cvm "github.com/PlatONnetwork/PlatON-Go/common/vm"
 	"github.com/PlatONnetwork/PlatON-Go/consensus"
-	mycrypto "github.com/PlatONnetwork/PlatON-Go/consensus/cbft/crypto"
 	"github.com/PlatONnetwork/PlatON-Go/core"
 	"github.com/PlatONnetwork/PlatON-Go/core/cbfttypes"
 	"github.com/PlatONnetwork/PlatON-Go/core/types"
@@ -15,26 +14,28 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/event"
 	"github.com/PlatONnetwork/PlatON-Go/log"
 	"github.com/PlatONnetwork/PlatON-Go/p2p/discover"
+	"github.com/PlatONnetwork/PlatON-Go/params"
 	"github.com/PlatONnetwork/PlatON-Go/rlp"
 )
 
-func newValidators(nodes []discover.Node, validBlockNumber uint64) *cbfttypes.Validators {
+func newValidators(nodes []params.CbftNode, validBlockNumber uint64) *cbfttypes.Validators {
 	vds := &cbfttypes.Validators{
 		Nodes:            make(cbfttypes.ValidateNodeMap, len(nodes)),
 		ValidBlockNumber: validBlockNumber,
 	}
 
 	for i, node := range nodes {
-		pubkey, err := node.ID.Pubkey()
+		pubkey, err := node.Node.ID.Pubkey()
 		if err != nil {
 			panic(err)
 		}
 
-		vds.Nodes[node.ID] = &cbfttypes.ValidateNode{
-			Index:   i,
-			Address: crypto.PubkeyToAddress(*pubkey),
-			PubKey:  pubkey,
-			NodeID:  node.ID,
+		vds.Nodes[node.Node.ID] = &cbfttypes.ValidateNode{
+			Index:     i,
+			Address:   crypto.PubkeyToAddress(*pubkey),
+			PubKey:    pubkey,
+			NodeID:    node.Node.ID,
+			BlsPubKey: &node.BlsPubKey,
 		}
 	}
 	return vds
@@ -46,7 +47,7 @@ type StaticAgency struct {
 	validators *cbfttypes.Validators
 }
 
-func NewStaticAgency(nodes []discover.Node) consensus.Agency {
+func NewStaticAgency(nodes []params.CbftNode) consensus.Agency {
 	return &StaticAgency{
 		validators: newValidators(nodes, 0),
 	}
@@ -86,7 +87,7 @@ type InnerAgency struct {
 	defaultValidators     *cbfttypes.Validators
 }
 
-func NewInnerAgency(nodes []discover.Node, chain *core.BlockChain, blocksPerNode, offset int) consensus.Agency {
+func NewInnerAgency(nodes []params.CbftNode, chain *core.BlockChain, blocksPerNode, offset int) consensus.Agency {
 	return &InnerAgency{
 		blocksPerNode:         uint64(blocksPerNode),
 		defaultBlocksPerRound: uint64(len(nodes) * blocksPerNode),
@@ -438,29 +439,20 @@ func (vp *ValidatorPool) Verify(blockNumber uint64, validatorIndex uint32, msg, 
 
 // VerifyAggSig verify aggregation signature.
 func (vp *ValidatorPool) VerifyAggSig(blockNumber uint64, validatorIndexes []uint32, msg, signature []byte) bool {
-	vp.lock.RLock()
-	validators := vp.currentValidators
-	if blockNumber <= vp.switchPoint {
-		validators = vp.prevValidators
-	}
+	/*
+		vp.lock.RLock()
+		validators := vp.currentValidators
+		if blockNumber <= vp.switchPoint {
+			validators = vp.prevValidators
+		}
 
-	nodeList, err := validators.NodeListByIndexes(validatorIndexes)
-	if err != nil {
-		return false
-	}
-	vp.lock.RUnlock()
-
-	pub := &mycrypto.PublicKey{}
-	for _, node := range nodeList {
-		pub.Add(node.AggPubKey)
-	}
-
-	sig := &mycrypto.Signature{}
-	err = sig.Recover(string(signature))
-	if err != nil {
-		return false
-	}
-	return sig.Verify(pub, string(msg))
+		nodeList, err := validators.NodeListByIndexes(validatorIndexes)
+		if err != nil {
+			return false
+		}
+		vp.lock.RUnlock()
+	*/
+	return true
 }
 
 func nextRound(blockNumber uint64) uint64 {
