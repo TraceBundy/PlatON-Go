@@ -124,7 +124,7 @@ type Engine interface {
 
 	CurrentBlock() *types.Block
 
-	FastSyncCommitHead() <-chan error
+	FastSyncCommitHead(block *types.Block) error
 
 	// Close terminates any background threads maintained by the consensus engine.
 	Close() error

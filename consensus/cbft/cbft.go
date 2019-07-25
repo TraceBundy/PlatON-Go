@@ -508,13 +508,9 @@ func (cbft *Cbft) NextBaseBlock() *types.Block {
 }
 
 func (cbft *Cbft) InsertChain(block *types.Block) error {
-	pause := func() { atomic.StoreInt32(&cbft.syncing, 1) }
-	resume := func() { atomic.StoreInt32(&cbft.syncing, 0) }
-
-	// Pause cbft engine
-	pause()
-	// Resume cbft engine.
-	defer resume()
+	cbft.log.Debug("Insert chain", "number", block.Number(), "hash", block.Hash())
+	cbft.pause()
+	defer cbft.resume()
 
 	if block.NumberU64() <= cbft.state.HighestLockBlock().NumberU64() {
 		cbft.log.Debug("The inserted block has exists in chain",
@@ -556,6 +552,7 @@ func (cbft *Cbft) InsertChain(block *types.Block) error {
 		cbft.log.Error("Execting block fail", "number", block.Number(), "hash", block.Hash(), "parent", parent.Hash(), "parentHash", block.ParentHash())
 		return errors.New("failed to executed block")
 	}
+	// FIXME: needed update highest exection block?
 
 	result := make(chan error, 1)
 	cbft.asyncCallCh <- func() {
@@ -605,21 +602,34 @@ func (cbft *Cbft) checkStart(exe func()) {
 	}
 }
 
-func (cbft *Cbft) FastSyncCommitHead() <-chan error {
+func (cbft *Cbft) FastSyncCommitHead(block *types.Block) error {
+	cbft.log.Debug("Fast sync commit head", "number", block.Number(), "hash", block.Hash())
+	cbft.pause()
+	defer cbft.resume()
+
 	result := make(chan error, 1)
-
 	cbft.asyncCallCh <- func() {
-		currentBlock := cbft.blockChain.GetBlock(cbft.blockChain.CurrentHeader().Hash(), cbft.blockChain.CurrentHeader().Number.Uint64())
+		_, qc, err := ctypes.DecodeExtra(block.ExtraData())
+		if err != nil {
+			cbft.log.Warn("Decode block extra data fail", "number", block.Number(), "hash", block.Hash())
+			result <- errors.New("failed to decode block extra data")
+			return
+		}
+		// TODO: verifies qc signature
+		//
 
-		// TODO: update view
-		cbft.state.SetHighestExecutedBlock(currentBlock)
-		cbft.state.SetHighestQCBlock(currentBlock)
-		cbft.state.SetHighestLockBlock(currentBlock)
-		cbft.state.SetHighestCommitBlock(currentBlock)
+		cbft.blockTree = ctypes.NewBlockTree(block, qc)
+
+		cbft.changeView(qc.Epoch, qc.ViewNumber, block, qc, nil)
+
+		cbft.state.SetHighestExecutedBlock(block)
+		cbft.state.SetHighestQCBlock(block)
+		cbft.state.SetHighestLockBlock(block)
+		cbft.state.SetHighestCommitBlock(block)
 
 		result <- nil
 	}
-	return result
+	return <-result
 }
 
 func (cbft *Cbft) Close() error {
@@ -861,3 +871,6 @@ func (cbft *Cbft) VerifyConsensusMsg(msg ctypes.ConsensusMsg) (*cbfttypes.Valida
 	}
 	return vnode, nil
 }
+
+func (cbft *Cbft) pause()  { atomic.StoreInt32(&cbft.syncing, 1) }
+func (cbft *Cbft) resume() { atomic.StoreInt32(&cbft.syncing, 0) }

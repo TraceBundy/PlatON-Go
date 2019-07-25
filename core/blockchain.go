@@ -341,7 +341,7 @@ func (bc *BlockChain) FastSyncCommitHead(hash common.Hash) error {
 	bc.mu.Unlock()
 
 	log.Info("Committed new head block", "number", block.Number(), "hash", hash)
-	return <-bc.engine.FastSyncCommitHead()
+	return bc.engine.FastSyncCommitHead(block)
 }
 
 // GasLimit returns the gas limit of the current HEAD block.
