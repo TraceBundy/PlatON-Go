@@ -428,11 +428,14 @@ func (cbft *Cbft) OnSeal(block *types.Block, results chan<- *types.Block, stop <
 		return
 	}
 
+	me, _ := cbft.validatorPool.GetValidatorByNodeID(cbft.state.HighestExecutedBlock().NumberU64(), cbft.config.Option.NodeID)
+
 	prepareBlock := &protocols.PrepareBlock{
-		Epoch:      cbft.state.Epoch(),
-		ViewNumber: cbft.state.ViewNumber(),
-		Block:      block,
-		BlockIndex: cbft.state.NumViewBlocks(),
+		Epoch:         cbft.state.Epoch(),
+		ViewNumber:    cbft.state.ViewNumber(),
+		Block:         block,
+		BlockIndex:    cbft.state.NumViewBlocks(),
+		ProposalIndex: uint32(me.Index),
 	}
 
 	if cbft.state.NumViewBlocks() == 0 {
@@ -512,6 +515,14 @@ func (cbft *Cbft) InsertChain(block *types.Block) error {
 	pause()
 	// Resume cbft engine.
 	defer resume()
+
+	if block.NumberU64() <= cbft.state.HighestLockBlock().NumberU64() {
+		cbft.log.Debug("The inserted block has exists in chain",
+			"number", block.Number(), "hash", block.Hash(),
+			"lockedNumber", cbft.state.HighestLockBlock().Number(),
+			"lockedHash", cbft.state.HighestLockBlock().Hash())
+		return nil
+	}
 
 	// Check if the inserted block's parent is highest locked block or highest qc block.
 	// The correct block can link chain.
