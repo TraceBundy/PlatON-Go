@@ -18,7 +18,6 @@
 package consensus
 
 import (
-	"crypto/ecdsa"
 	"time"
 
 	"github.com/PlatONnetwork/PlatON-Go/common/consensus"
@@ -169,8 +168,6 @@ type Bft interface {
 	GetBlock(hash common.Hash, number uint64) *types.Block
 
 	GetBlockWithoutLock(hash common.Hash, number uint64) *types.Block
-
-	SetPrivateKey(privateKey *ecdsa.PrivateKey)
 
 	IsSignedBySelf(sealHash common.Hash, header *types.Header) bool
 

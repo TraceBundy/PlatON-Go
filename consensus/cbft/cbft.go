@@ -2,7 +2,6 @@ package cbft
 
 import (
 	"bytes"
-	"crypto/ecdsa"
 	"crypto/elliptic"
 	"encoding/json"
 	"fmt"
@@ -403,7 +402,6 @@ func (cbft *Cbft) Seal(chain consensus.ChainReader, block *types.Block, results 
 
 func (cbft *Cbft) OnSeal(block *types.Block, results chan<- *types.Block, stop <-chan struct{}) {
 	// TODO: check is turn to seal block
-
 	if cbft.state.HighestQCBlock().Hash() != block.ParentHash() ||
 		cbft.state.HighestExecutedBlock().Hash() != block.ParentHash() {
 		cbft.log.Warn("Futile block cause highest executed block changed", "nubmer", block.Number(), "parentHash", block.ParentHash(),
@@ -412,7 +410,6 @@ func (cbft *Cbft) OnSeal(block *types.Block, results chan<- *types.Block, stop <
 		return
 	}
 
-	// TODO: seal process
 	prepareBlock := &protocols.PrepareBlock{
 		Epoch:      cbft.state.Epoch(),
 		ViewNumber: cbft.state.ViewNumber(),
@@ -431,7 +428,6 @@ func (cbft *Cbft) OnSeal(block *types.Block, results chan<- *types.Block, stop <
 
 	cbft.log.Info("Seal New Block", "prepareBlock", prepareBlock.String())
 
-	// TODO: signature block - fake verify.
 	cbft.signMsgByBls(prepareBlock)
 
 	cbft.state.SetExecuting(prepareBlock.BlockIndex, true)
@@ -581,7 +577,6 @@ func (cbft *Cbft) ShouldSeal(curTime time.Time) (bool, error) {
 }
 
 func (cbft *Cbft) OnShouldSeal(result chan error) {
-	// todo: need add remark.
 	select {
 	case <-result:
 		cbft.log.Trace("Should seal timeout")
@@ -653,10 +648,6 @@ func (cbft *Cbft) GetBlock(hash common.Hash, number uint64) *types.Block {
 func (cbft *Cbft) GetBlockWithoutLock(hash common.Hash, number uint64) *types.Block {
 	block, _ := cbft.blockTree.FindBlockAndQC(hash, number)
 	return block
-}
-
-func (Cbft) SetPrivateKey(privateKey *ecdsa.PrivateKey) {
-	//panic("implement me")
 }
 
 func (cbft *Cbft) IsSignedBySelf(sealHash common.Hash, header *types.Header) bool {
