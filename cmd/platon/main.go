@@ -172,6 +172,7 @@ var (
 		utils.CbftWalEnabledFlag,
 		utils.CbftEvidenceDir,
 		utils.CbftMaxPingLatency,
+		utils.CbftBlsPriKeyFileFlag,
 	}
 )
 
@@ -225,6 +226,7 @@ func init() {
 
 	app.Before = func(ctx *cli.Context) error {
 		runtime.GOMAXPROCS(runtime.NumCPU())
+		bls.Init(bls.CurveFp254BNb)
 
 		logdir := ""
 		if ctx.GlobalBool(utils.DashboardEnabledFlag.Name) {
@@ -285,7 +287,6 @@ func geth(ctx *cli.Context) error {
 	if args := ctx.Args(); len(args) > 0 {
 		return fmt.Errorf("invalid command: %q", args[0])
 	}
-	bls.Init(bls.CurveFp254BNb)
 	node := makeFullNode(ctx)
 	startNode(ctx, node)
 	node.Wait()

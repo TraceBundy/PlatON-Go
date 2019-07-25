@@ -3,6 +3,7 @@ package bls
 import (
 	"bytes"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"testing"
@@ -361,6 +362,15 @@ func testMarshal(t *testing.T) {
 
 	key1, _ := pub2.MarshalText()
 	assert.Equal(t, key, string(key1))
+
+	type TestPubMarshal struct {
+		Pub *PublicKey `json:"pub"`
+	}
+
+	tpm := TestPubMarshal{
+		Pub: &pub2,
+	}
+	json.Marshal(tpm)
 }
 
 func test(t *testing.T, c int) {

@@ -82,7 +82,7 @@ type SecretKey struct {
 }
 
 func LoadBLS(file string) (*SecretKey, error) {
-	buf := make([]byte, 128)
+	buf := make([]byte, 64)
 	fd, err := os.Open(file)
 	if err != nil {
 		return nil, err
