@@ -5,6 +5,7 @@ import (
 	"crypto/elliptic"
 	"encoding/json"
 	"fmt"
+	"sync/atomic"
 
 	errors2 "github.com/pkg/errors"
 
@@ -56,7 +57,7 @@ type Cbft struct {
 	network          *network.EngineManager
 
 	start    bool
-	syncing  bool
+	syncing  int32
 	fetching bool
 	// Async call channel
 	asyncCallCh chan func()
@@ -99,7 +100,7 @@ func New(sysConfig *params.CbftConfig, optConfig *ctypes.OptionsConfig, eventMux
 		syncMsgCh:          make(chan *ctypes.MsgInfo, optConfig.PeerMsgQueueSize),
 		log:                log.New(),
 		start:              false,
-		syncing:            false,
+		syncing:            0,
 		fetching:           false,
 		asyncCallCh:        make(chan func(), optConfig.PeerMsgQueueSize),
 		nodeServiceContext: ctx,
@@ -124,6 +125,7 @@ func (cbft *Cbft) NodeId() discover.NodeID {
 func (cbft *Cbft) Start(chain consensus.ChainReader, blockCacheWriter consensus.BlockCacheWriter, txPool consensus.TxPoolReset, agency consensus.Agency) error {
 	cbft.blockChain = chain
 	cbft.txPool = txPool
+	cbft.blockCacheWriter = blockCacheWriter
 	cbft.asyncExecutor = executor.NewAsyncExecutor(blockCacheWriter.Execute)
 	cbft.validatorPool = validator.NewValidatorPool(agency, chain.CurrentHeader().Number.Uint64(), cbft.config.Option.NodeID)
 
@@ -314,7 +316,7 @@ func (cbft *Cbft) handleSyncMsg(info *ctypes.MsgInfo) {
 }
 
 func (cbft *Cbft) running() bool {
-	return !cbft.syncing && !cbft.fetching
+	return atomic.LoadInt32(&cbft.syncing) == 0 && !cbft.fetching
 }
 
 func (cbft *Cbft) Author(header *types.Header) (common.Address, error) {
@@ -338,8 +340,24 @@ func (cbft *Cbft) VerifyHeader(chain consensus.ChainReader, header *types.Header
 	return nil
 }
 
-func (Cbft) VerifyHeaders(chain consensus.ChainReader, headers []*types.Header, seals []bool) (chan<- struct{}, <-chan error) {
-	panic("implement me")
+func (cbft *Cbft) VerifyHeaders(chain consensus.ChainReader, headers []*types.Header, seals []bool) (chan<- struct{}, <-chan error) {
+	cbft.log.Trace("Verify headers", "total", len(headers))
+
+	abort := make(chan struct{})
+	results := make(chan error, len(headers))
+
+	go func() {
+		for _, header := range headers {
+			err := cbft.VerifyHeader(chain, header, false)
+
+			select {
+			case <-abort:
+				return
+			case results <- err:
+			}
+		}
+	}()
+	return abort, results
 }
 
 // VerifySeal implements consensus.Engine, checking whether the signature contained
@@ -474,8 +492,53 @@ func (cbft *Cbft) NextBaseBlock() *types.Block {
 	return <-result
 }
 
-func (Cbft) InsertChain(block *types.Block, errCh chan error) {
-	panic("implement me")
+func (cbft *Cbft) InsertChain(block *types.Block) error {
+	pause := func() { atomic.StoreInt32(&cbft.syncing, 1) }
+	resume := func() { atomic.StoreInt32(&cbft.syncing, 0) }
+
+	// Pause cbft engine
+	pause()
+	// Resume cbft engine.
+	defer resume()
+
+	// Check if the inserted block's parent is highest locked block or highest qc block.
+	// The correct block can link chain.
+	if block.ParentHash() != cbft.state.HighestLockBlock().Hash() &&
+		block.ParentHash() != cbft.state.HighestQCBlock().Hash() {
+		cbft.log.Warn("Not found the inserted block's parent block",
+			"nubmer", block.Number(), "hash", block.Hash(),
+			"parentHash", block.ParentHash(),
+			"lockedNumber", cbft.state.HighestLockBlock().Number(),
+			"lockedHash", cbft.state.HighestLockBlock().Hash(),
+			"qcNumber", cbft.state.HighestQCBlock().Number(),
+			"qcHash", cbft.state.HighestQCBlock().Hash())
+		return errors.New("orphan block")
+	}
+
+	// Verifies block
+	_, qc, err := ctypes.DecodeExtra(block.ExtraData())
+	if err != nil {
+		cbft.log.Error("Decode block extra date fail", "number", block.Number(), "hash", block.Hash())
+		return errors.New("failed to decode block extra data")
+	}
+	// TODO: Verifies qc signature
+
+	parent := cbft.state.HighestQCBlock()
+	if block.ParentHash() == cbft.state.HighestLockBlock().Hash() {
+		parent = cbft.state.HighestQCBlock()
+	}
+
+	err = cbft.blockCacheWriter.Execute(block, parent)
+	if err != nil {
+		cbft.log.Error("Execting block fail", "number", block.Number(), "hash", block.Hash(), "parent", parent.Hash(), "parentHash", block.ParentHash())
+		return errors.New("failed to executed block")
+	}
+
+	result := make(chan error, 1)
+	cbft.asyncCallCh <- func() {
+		result <- cbft.OnInsertQCBlock([]*types.Block{block}, []*ctypes.QuorumCert{qc})
+	}
+	return <-result
 }
 
 // HashBlock check if the specified block exists in block tree.
@@ -664,8 +727,7 @@ func (cbft *Cbft) OnPong(nodeID discover.NodeID, netLatency int64) error {
 }
 
 func (cbft *Cbft) Config() *ctypes.Config {
-	panic("need to be improved")
-	return nil
+	return &cbft.config
 }
 
 // Return the highest submitted block number of the current node.
