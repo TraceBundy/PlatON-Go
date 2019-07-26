@@ -165,7 +165,11 @@ func (cbft *Cbft) Start(chain consensus.ChainReader, blockCacheWriter consensus.
 	// Initialize current view
 	cbft.state.SetHighestExecutedBlock(block)
 	cbft.state.AddQCBlock(block, qc)
-	cbft.state.SetExecuting(qc.BlockIndex, true)
+	if qc != nil {
+		cbft.state.SetExecuting(qc.BlockIndex, true)
+	} else {
+		cbft.state.SetExecuting(0, true)
+	}
 	cbft.state.AddQC(qc)
 
 	// try change view again
@@ -443,10 +447,10 @@ func (cbft *Cbft) OnSeal(block *types.Block, results chan<- *types.Block, stop <
 	me, _ := cbft.validatorPool.GetValidatorByNodeID(cbft.state.HighestExecutedBlock().NumberU64(), cbft.config.Option.NodeID)
 
 	prepareBlock := &protocols.PrepareBlock{
-		Epoch:      cbft.state.Epoch(),
-		ViewNumber: cbft.state.ViewNumber(),
-		Block:      block,
-		BlockIndex: cbft.state.NextViewBlockIndex(),
+		Epoch:         cbft.state.Epoch(),
+		ViewNumber:    cbft.state.ViewNumber(),
+		Block:         block,
+		BlockIndex:    cbft.state.NextViewBlockIndex(),
 		ProposalIndex: uint32(me.Index),
 	}
 
@@ -553,7 +557,11 @@ func (cbft *Cbft) InsertChain(block *types.Block) error {
 		cbft.log.Error("Decode block extra date fail", "number", block.Number(), "hash", block.Hash())
 		return errors.New("failed to decode block extra data")
 	}
-	// TODO: Verifies qc signature
+
+	if err := cbft.verifyPrepareQC(qc); err != nil {
+		cbft.log.Error("Verify prepare QC fail", "number", block.Number(), "hash", block.Hash(), "err", err)
+		return err
+	}
 
 	parent := cbft.state.HighestQCBlock()
 	if block.ParentHash() == cbft.state.HighestLockBlock().Hash() {
@@ -628,14 +636,11 @@ func (cbft *Cbft) FastSyncCommitHead(block *types.Block) error {
 			result <- errors.New("failed to decode block extra data")
 			return
 		}
-		// TODO: verifies qc signature
-		//
 
 		cbft.blockTree = ctypes.NewBlockTree(block, qc)
 
 		cbft.changeView(qc.Epoch, qc.ViewNumber, block, qc, nil)
 
-		cbft.state.SetHighestExecutedBlock(block)
 		cbft.state.SetHighestQCBlock(block)
 		cbft.state.SetHighestLockBlock(block)
 		cbft.state.SetHighestCommitBlock(block)
