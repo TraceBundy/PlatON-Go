@@ -635,16 +635,9 @@ func (cbft *Cbft) FastSyncCommitHead(block *types.Block) error {
 
 		cbft.changeView(qc.Epoch, qc.ViewNumber, block, qc, nil)
 
-<<<<<<< HEAD
 		cbft.state.SetHighestQCBlock(block)
 		cbft.state.SetHighestLockBlock(block)
 		cbft.state.SetHighestCommitBlock(block)
-=======
-		// TODO: update view
-		cbft.state.SetHighestQCBlock(currentBlock)
-		cbft.state.SetHighestLockBlock(currentBlock)
-		cbft.state.SetHighestCommitBlock(currentBlock)
->>>>>>> consensus
 
 		result <- nil
 	}
