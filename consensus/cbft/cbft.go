@@ -157,20 +157,16 @@ func (cbft *Cbft) Start(chain consensus.ChainReader, blockCacheWriter consensus.
 	}
 
 	//Initialize view state
-	cbft.state.SetHighestExecutedBlock(block)
 	cbft.state.SetHighestQCBlock(block)
 	cbft.state.SetHighestLockBlock(block)
 	cbft.state.SetHighestCommitBlock(block)
 
 	// Initialize current view
-	cbft.state.SetHighestExecutedBlock(block)
-	cbft.state.AddQCBlock(block, qc)
 	if qc != nil {
 		cbft.state.SetExecuting(qc.BlockIndex, true)
-	} else {
-		cbft.state.SetExecuting(0, true)
+		cbft.state.AddQCBlock(block, qc)
+		cbft.state.AddQC(qc)
 	}
-	cbft.state.AddQC(qc)
 
 	// try change view again
 	cbft.tryChangeView()
@@ -485,8 +481,6 @@ func (cbft *Cbft) OnSeal(block *types.Block, results chan<- *types.Block, stop <
 
 	cbft.findQCBlock()
 
-	cbft.state.SetHighestExecutedBlock(block)
-
 	cbft.network.Broadcast(prepareBlock)
 
 	go func() {
@@ -641,9 +635,16 @@ func (cbft *Cbft) FastSyncCommitHead(block *types.Block) error {
 
 		cbft.changeView(qc.Epoch, qc.ViewNumber, block, qc, nil)
 
+<<<<<<< HEAD
 		cbft.state.SetHighestQCBlock(block)
 		cbft.state.SetHighestLockBlock(block)
 		cbft.state.SetHighestCommitBlock(block)
+=======
+		// TODO: update view
+		cbft.state.SetHighestQCBlock(currentBlock)
+		cbft.state.SetHighestLockBlock(currentBlock)
+		cbft.state.SetHighestCommitBlock(currentBlock)
+>>>>>>> consensus
 
 		result <- nil
 	}
