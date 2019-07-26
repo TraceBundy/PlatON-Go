@@ -143,12 +143,6 @@ func (v *viewQCs) index(i uint32) *ctypes.QuorumCert {
 }
 
 func (v *viewQCs) addQC(qc *ctypes.QuorumCert) {
-	if qc == nil {
-		if v.maxIndex == math.MaxUint32 {
-			v.maxIndex = 0
-		}
-		return
-	}
 	v.qcs[qc.BlockIndex] = qc
 	if v.maxIndex == math.MaxUint32 {
 		v.maxIndex = qc.BlockIndex
@@ -337,9 +331,6 @@ func (q qcBlock) number() uint64 {
 	return q.b.NumberU64()
 }
 func (q qcBlock) blockIndex() uint32 {
-	if q.qc == nil {
-		return 0
-	}
 	return q.qc.BlockIndex
 }
 
