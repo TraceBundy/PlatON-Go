@@ -5,10 +5,6 @@ import (
 	"crypto/elliptic"
 	"encoding/json"
 	"fmt"
-	"sync/atomic"
-
-	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/utils"
-	"github.com/PlatONnetwork/PlatON-Go/crypto/bls"
 
 	errors "github.com/pkg/errors"
 
@@ -27,12 +23,14 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/rules"
 	cstate "github.com/PlatONnetwork/PlatON-Go/consensus/cbft/state"
 	ctypes "github.com/PlatONnetwork/PlatON-Go/consensus/cbft/types"
+	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/utils"
 	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/validator"
 	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/wal"
 	"github.com/PlatONnetwork/PlatON-Go/core/cbfttypes"
 	"github.com/PlatONnetwork/PlatON-Go/core/state"
 	"github.com/PlatONnetwork/PlatON-Go/core/types"
 	"github.com/PlatONnetwork/PlatON-Go/crypto"
+	"github.com/PlatONnetwork/PlatON-Go/crypto/bls"
 	"github.com/PlatONnetwork/PlatON-Go/event"
 	"github.com/PlatONnetwork/PlatON-Go/log"
 	"github.com/PlatONnetwork/PlatON-Go/node"
@@ -58,9 +56,9 @@ type Cbft struct {
 	log              log.Logger
 	network          *network.EngineManager
 
-	start    bool
+	start    int32
 	syncing  int32
-	fetching bool
+	fetching int32
 	// Async call channel
 	asyncCallCh chan func()
 
@@ -101,9 +99,9 @@ func New(sysConfig *params.CbftConfig, optConfig *ctypes.OptionsConfig, eventMux
 		peerMsgCh:          make(chan *ctypes.MsgInfo, optConfig.PeerMsgQueueSize),
 		syncMsgCh:          make(chan *ctypes.MsgInfo, optConfig.PeerMsgQueueSize),
 		log:                log.New(),
-		start:              false,
+		start:              0,
 		syncing:            0,
-		fetching:           false,
+		fetching:           0,
 		asyncCallCh:        make(chan func(), optConfig.PeerMsgQueueSize),
 		nodeServiceContext: ctx,
 		queues:             make(map[string]int),
@@ -189,7 +187,7 @@ func (cbft *Cbft) Start(chain consensus.ChainReader, blockCacheWriter consensus.
 	// Start the handler to process the message.
 	go cbft.network.Start()
 
-	cbft.start = true
+	utils.SetTrue(&cbft.start)
 	cbft.log.Info("Cbft engine start")
 	return nil
 }
@@ -328,7 +326,7 @@ func (cbft *Cbft) handleSyncMsg(info *ctypes.MsgInfo) {
 }
 
 func (cbft *Cbft) running() bool {
-	return atomic.LoadInt32(&cbft.syncing) == 0 && !cbft.fetching
+	return utils.False(&cbft.syncing) && utils.False(&cbft.fetching)
 }
 
 func (cbft *Cbft) Author(header *types.Header) (common.Address, error) {
@@ -612,7 +610,7 @@ func (cbft *Cbft) CurrentBlock() *types.Block {
 }
 
 func (cbft *Cbft) checkStart(exe func()) {
-	if cbft.start {
+	if utils.True(&cbft.start) {
 		exe()
 	}
 }
@@ -646,7 +644,7 @@ func (cbft *Cbft) FastSyncCommitHead(block *types.Block) error {
 
 func (cbft *Cbft) Close() error {
 	cbft.log.Info("Close cbft consensus")
-	cbft.start = false
+	utils.SetFalse(&cbft.start)
 	cbft.closeOnce.Do(func() {
 		// Short circuit if the exit channel is not allocated.
 		if cbft.exitCh == nil {
@@ -912,8 +910,8 @@ func (cbft *Cbft) verifyConsensusMsg(msg ctypes.ConsensusMsg) (*cbfttypes.Valida
 	return vnode, nil
 }
 
-func (cbft *Cbft) pause()  { atomic.StoreInt32(&cbft.syncing, 1) }
-func (cbft *Cbft) resume() { atomic.StoreInt32(&cbft.syncing, 0) }
+func (cbft *Cbft) pause()  { utils.SetTrue(&cbft.syncing) }
+func (cbft *Cbft) resume() { utils.SetFalse(&cbft.syncing) }
 
 func (cbft *Cbft) generatePrepareQC(votes map[uint32]*protocols.PrepareVote) *ctypes.QuorumCert {
 	if len(votes) == 0 {
