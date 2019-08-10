@@ -231,8 +231,11 @@ func NewValidatorPool(agency consensus.Agency, blockNumber uint64, nodeID discov
 
 // ShouldSwitch check if should switch validators at the moment.
 func (vp *ValidatorPool) ShouldSwitch(blockNumber uint64) bool {
-	if blockNumber <= vp.switchPoint {
+	if blockNumber == 0 {
 		return false
+	}
+	if blockNumber == vp.switchPoint {
+		return true
 	}
 	return blockNumber == vp.agency.GetLastNumber(blockNumber)
 }
