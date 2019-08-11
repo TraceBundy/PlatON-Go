@@ -46,6 +46,25 @@ import (
 
 const cbftVersion = 1
 
+type MsgHandleError struct {
+	error
+	err        error
+	disconnect bool
+	verifySign bool
+}
+
+func (e MsgHandleError) VerifySign() bool {
+	return e.verifySign
+}
+
+func (e MsgHandleError) Disconnect() bool {
+	return e.disconnect
+}
+
+func (e MsgHandleError) Error() string {
+	return e.err.Error()
+}
+
 type Cbft struct {
 	config           ctypes.Config
 	eventMux         *event.TypeMux
@@ -313,20 +332,37 @@ func (cbft *Cbft) receiveLoop() {
 	// channel Divided into read-only type, writable type
 	// Read-only is the channel that gets the current CBFT status.
 	// Writable type is the channel that affects the consensus state.
+
+	forward := func(msg *ctypes.MsgInfo, err *MsgHandleError) {
+		if err != nil {
+			if err.Disconnect() {
+				cbft.network.Unregister(msg.PeerID)
+				return
+			}
+
+			if c, ok := msg.Msg.(ctypes.ConsensusMsg); ok {
+				if !err.VerifySign() {
+					if _, err := cbft.verifyConsensusMsg(c); err != nil {
+						cbft.log.Warn("Forward message failed, verify sign failed, need disconnect", "peer", msg.PeerID)
+						cbft.network.Unregister(msg.PeerID)
+						return
+					}
+				}
+			}
+		}
+		cbft.network.Forwarding(msg.PeerID, msg.Msg)
+	}
+
 	for {
 		select {
 		case msg := <-cbft.peerMsgCh:
-			// Forward the message before processing the message.
-			cbft.network.Forwarding(msg.PeerID, msg.Msg)
-
-			cbft.handleConsensusMsg(msg)
+			err := cbft.handleConsensusMsg(msg)
+			forward(msg, err)
 			cbft.forgetMessage(msg.PeerID)
 
 		case msg := <-cbft.syncMsgCh:
-			// Forward the message before processing the message.
-			cbft.network.Forwarding(msg.PeerID, msg.Msg)
-			cbft.handleSyncMsg(msg)
-			//
+			err := cbft.handleSyncMsg(msg)
+			forward(msg, err)
 			cbft.forgetMessage(msg.PeerID)
 
 		case msg := <-cbft.asyncExecutor.ExecuteStatus():
@@ -341,13 +377,13 @@ func (cbft *Cbft) receiveLoop() {
 }
 
 //Handling consensus messages, there are three main types of messages. prepareBlock, prepareVote, viewChange
-func (cbft *Cbft) handleConsensusMsg(info *ctypes.MsgInfo) {
+func (cbft *Cbft) handleConsensusMsg(info *ctypes.MsgInfo) *MsgHandleError {
 	if !cbft.running() {
 		cbft.log.Debug("Consensus message pause", "syncing", atomic.LoadInt32(&cbft.syncing), "fetching", atomic.LoadInt32(&cbft.fetching))
-		return
+		return &MsgHandleError{error: fmt.Errorf("consensus message pause"), disconnect: false, verifySign: false}
 	}
 	msg, id := info.Msg, info.PeerID
-	var err error
+	var err *MsgHandleError
 
 	switch msg := msg.(type) {
 	case *protocols.PrepareBlock:
@@ -359,50 +395,56 @@ func (cbft *Cbft) handleConsensusMsg(info *ctypes.MsgInfo) {
 	}
 
 	if err != nil {
-		cbft.log.Error("Handle msg Failed", "error", err, "type", reflect.TypeOf(msg), "peer", id)
+		cbft.log.Error("Handle msg failed", "error", err, "type", reflect.TypeOf(msg), "peer", id)
 	}
+	return err
 }
 
 // Behind the node will be synchronized by synchronization message
-func (cbft *Cbft) handleSyncMsg(info *ctypes.MsgInfo) {
+func (cbft *Cbft) handleSyncMsg(info *ctypes.MsgInfo) *MsgHandleError {
+	var err *MsgHandleError
 	msg, id := info.Msg, info.PeerID
 	if !cbft.fetcher.MatchTask(id, msg) {
 		switch msg := msg.(type) {
 		case *protocols.GetPrepareBlock:
-			cbft.OnGetPrepareBlock(id, msg)
+			err = cbft.OnGetPrepareBlock(id, msg)
 
 		case *protocols.GetBlockQuorumCert:
-			cbft.OnGetBlockQuorumCert(id, msg)
+			err = cbft.OnGetBlockQuorumCert(id, msg)
 
 		case *protocols.BlockQuorumCert:
-			cbft.OnBlockQuorumCert(id, msg)
+			err = cbft.OnBlockQuorumCert(id, msg)
 
 		case *protocols.GetPrepareVote:
-			cbft.OnGetPrepareVote(id, msg)
+			err = cbft.OnGetPrepareVote(id, msg)
 
 		case *protocols.PrepareVotes:
-			cbft.OnPrepareVotes(id, msg)
+			err = cbft.OnPrepareVotes(id, msg)
 
 		case *protocols.GetQCBlockList:
-			cbft.OnGetQCBlockList(id, msg)
+			err = cbft.OnGetQCBlockList(id, msg)
 
 		case *protocols.GetLatestStatus:
-			cbft.OnGetLatestStatus(id, msg)
+			err = cbft.OnGetLatestStatus(id, msg)
 
 		case *protocols.LatestStatus:
-			cbft.OnLatestStatus(id, msg)
+			err = cbft.OnLatestStatus(id, msg)
 
 		case *protocols.PrepareBlockHash:
-			cbft.OnPrepareBlockHash(id, msg)
+			err = cbft.OnPrepareBlockHash(id, msg)
 
 		case *protocols.GetViewChange:
-			cbft.OnGetViewChange(id, msg)
+			err = cbft.OnGetViewChange(id, msg)
 
 		case *protocols.ViewChangeQuorumCert:
-			cbft.OnViewChangeQuorumCert(id, msg)
+			err = cbft.OnViewChangeQuorumCert(id, msg)
 
 		}
 	}
+	if err != nil {
+		cbft.log.Error("Handle sync msg failed", "error", err, "type", reflect.TypeOf(msg), "peer", id)
+	}
+	return err
 }
 
 func (cbft *Cbft) running() bool {

@@ -120,7 +120,7 @@ func (cbft *Cbft) prepareVoteFetchRules(id string, vote *protocols.PrepareVote) 
 	}
 }
 
-func (cbft *Cbft) OnGetPrepareBlock(id string, msg *protocols.GetPrepareBlock) {
+func (cbft *Cbft) OnGetPrepareBlock(id string, msg *protocols.GetPrepareBlock) *MsgHandleError {
 	if msg.Epoch == cbft.state.Epoch() && msg.ViewNumber == cbft.state.ViewNumber() {
 		prepareBlock := cbft.state.PrepareBlockByIndex(msg.BlockIndex)
 		if prepareBlock != nil {
@@ -128,35 +128,42 @@ func (cbft *Cbft) OnGetPrepareBlock(id string, msg *protocols.GetPrepareBlock) {
 			cbft.network.Send(id, prepareBlock)
 		}
 	}
+	return nil
 }
 
-func (cbft *Cbft) OnGetBlockQuorumCert(id string, msg *protocols.GetBlockQuorumCert) {
+func (cbft *Cbft) OnGetBlockQuorumCert(id string, msg *protocols.GetBlockQuorumCert) *MsgHandleError {
 	_, qc := cbft.blockTree.FindBlockAndQC(msg.BlockHash, msg.BlockNumber)
 	if qc != nil {
 		cbft.network.Send(id, &protocols.BlockQuorumCert{BlockQC: qc})
 	}
+	return nil
 }
 
-func (cbft *Cbft) OnBlockQuorumCert(id string, msg *protocols.BlockQuorumCert) {
+func (cbft *Cbft) OnBlockQuorumCert(id string, msg *protocols.BlockQuorumCert) *MsgHandleError {
 	if msg.BlockQC.Epoch != cbft.state.Epoch() || msg.BlockQC.ViewNumber != cbft.state.ViewNumber() {
 		cbft.log.Debug("Receive BlockQuorumCert response failed", "local.epoch", cbft.state.Epoch(), "local.viewNumber", cbft.state.ViewNumber(), "msg", msg.String())
-		return
+		return nil
 	}
 
 	if err := cbft.verifyPrepareQC(msg.BlockQC); err != nil {
-		return
+		return &MsgHandleError{err: err, disconnect: true, verifySign: true}
 	}
 
 	cbft.insertPrepareQC(msg.BlockQC)
+	return nil
 }
 
-func (cbft *Cbft) OnGetQCBlockList(id string, msg *protocols.GetQCBlockList) {
+func (cbft *Cbft) OnGetQCBlockList(id string, msg *protocols.GetQCBlockList) *MsgHandleError {
 	highestQC := cbft.state.HighestQCBlock()
 
 	if highestQC.NumberU64() > msg.BlockNumber+3 ||
 		(highestQC.Hash() == msg.BlockHash && highestQC.NumberU64() == msg.BlockNumber) {
 		cbft.log.Debug(fmt.Sprintf("Receive GetQCBlockList failed, local.highestQC:%s,%d, msg:%s", highestQC.Hash().String(), highestQC.NumberU64(), msg.String()))
-		return
+		return &MsgHandleError{
+			err:        fmt.Errorf("request block too low"),
+			disconnect: false,
+			verifySign: false,
+		}
 	}
 
 	lock := cbft.state.HighestLockBlock()
@@ -186,13 +193,13 @@ func (cbft *Cbft) OnGetQCBlockList(id string, msg *protocols.GetQCBlockList) {
 		cbft.network.Send(id, &protocols.QCBlockList{QC: qcs, Blocks: blocks})
 		cbft.log.Debug("Send QCBlockList", "len", len(qcs))
 	}
-
+	return nil
 }
 
 // OnGetPrepareVote is responsible for processing the business logic
 // of the GetPrepareVote message. It will synchronously return a
 // PrepareVotes message to the sender.
-func (cbft *Cbft) OnGetPrepareVote(id string, msg *protocols.GetPrepareVote) error {
+func (cbft *Cbft) OnGetPrepareVote(id string, msg *protocols.GetPrepareVote) *MsgHandleError {
 	cbft.log.Debug("Received message on OnGetPrepareVote", "from", id, "msgHash", msg.MsgHash(), "message", msg.String())
 	// Get all the received PrepareVote of the block according to the index
 	// position of the block in the view.
@@ -219,7 +226,7 @@ func (cbft *Cbft) OnGetPrepareVote(id string, msg *protocols.GetPrepareVote) err
 }
 
 // OnPrepareVotes handling response from GetPrepareVote response.
-func (cbft *Cbft) OnPrepareVotes(id string, msg *protocols.PrepareVotes) error {
+func (cbft *Cbft) OnPrepareVotes(id string, msg *protocols.PrepareVotes) *MsgHandleError {
 	cbft.log.Debug("Received message on OnPrepareVotes", "from", id, "msgHash", msg.MsgHash(), "message", msg.String())
 	for _, vote := range msg.Votes {
 		if err := cbft.OnPrepareVote(id, vote); err != nil {
@@ -236,14 +243,14 @@ func (cbft *Cbft) OnPrepareVotes(id string, msg *protocols.PrepareVotes) error {
 // 1.Compare the blockNumber of the sending node with the local node,
 // and if the blockNumber of local node is larger then reply LatestStatus message,
 // the message contains the status information of the local node.
-func (cbft *Cbft) OnGetLatestStatus(id string, msg *protocols.GetLatestStatus) error {
+func (cbft *Cbft) OnGetLatestStatus(id string, msg *protocols.GetLatestStatus) *MsgHandleError {
 	cbft.log.Debug("Received message on OnGetLatestStatus", "from", id, "logicType", msg.LogicType, "msgHash", msg.MsgHash(), "message", msg.String())
 	// Define a function that performs the send action.
-	launcher := func(bType uint64, targetId string, blockNumber uint64, blockHash common.Hash) error {
+	launcher := func(bType uint64, targetId string, blockNumber uint64, blockHash common.Hash) *MsgHandleError {
 		p, err := cbft.network.GetPeer(targetId)
 		if err != nil {
 			cbft.log.Error("GetPeer failed", "err", err, "peerId", targetId)
-			return err
+			return &MsgHandleError{err: err, disconnect: false, verifySign: false}
 		}
 		switch bType {
 		case network.TypeForQCBn:
@@ -308,7 +315,7 @@ func (cbft *Cbft) OnGetLatestStatus(id string, msg *protocols.GetLatestStatus) e
 }
 
 // OnLatestStatus is used to process LatestStatus messages that received from peer.
-func (cbft *Cbft) OnLatestStatus(id string, msg *protocols.LatestStatus) error {
+func (cbft *Cbft) OnLatestStatus(id string, msg *protocols.LatestStatus) *MsgHandleError {
 	cbft.log.Debug("Received message on OnLatestStatus", "from", id, "msgHash", msg.MsgHash(), "message", msg.String())
 	switch msg.LogicType {
 	case network.TypeForQCBn:
@@ -318,7 +325,7 @@ func (cbft *Cbft) OnLatestStatus(id string, msg *protocols.LatestStatus) error {
 			p, err := cbft.network.GetPeer(id)
 			if err != nil {
 				cbft.log.Error("GetPeer failed", "err", err)
-				return err
+				return &MsgHandleError{err: err, disconnect: false, verifySign: false}
 			}
 			p.SetQcBn(new(big.Int).SetUint64(msg.BlockNumber))
 			cbft.log.Debug("LocalQCBn is lower than sender's", "localBn", localQCBn, "remoteBn", msg.BlockNumber)
@@ -331,7 +338,7 @@ func (cbft *Cbft) OnLatestStatus(id string, msg *protocols.LatestStatus) error {
 			p, err := cbft.network.GetPeer(id)
 			if err != nil {
 				cbft.log.Error("GetPeer failed", "err", err)
-				return err
+				return &MsgHandleError{err: err, disconnect: false, verifySign: false}
 			}
 			p.SetLockedBn(new(big.Int).SetUint64(msg.BlockNumber))
 			cbft.log.Debug("LocalLockedBn is lower than sender's", "localBn", localLockedBn, "remoteBn", msg.BlockNumber)
@@ -344,7 +351,7 @@ func (cbft *Cbft) OnLatestStatus(id string, msg *protocols.LatestStatus) error {
 			p, err := cbft.network.GetPeer(id)
 			if err != nil {
 				cbft.log.Error("GetPeer failed", "err", err)
-				return err
+				return &MsgHandleError{err: err, disconnect: false, verifySign: false}
 			}
 			p.SetCommitdBn(new(big.Int).SetUint64(msg.BlockNumber))
 			cbft.log.Debug("LocalCommitBn is lower than sender's", "localBn", localCommitBn, "remoteBn", msg.BlockNumber)
@@ -359,7 +366,7 @@ func (cbft *Cbft) OnLatestStatus(id string, msg *protocols.LatestStatus) error {
 // Note: After receiving the PrepareBlockHash message, it is determined whether the
 // block information exists locally. If not, send a network request to get
 // the block data.
-func (cbft *Cbft) OnPrepareBlockHash(id string, msg *protocols.PrepareBlockHash) error {
+func (cbft *Cbft) OnPrepareBlockHash(id string, msg *protocols.PrepareBlockHash) *MsgHandleError {
 	cbft.log.Debug("Received message on OnPrepareBlockHash", "from", id, "msgHash", msg.MsgHash(), "message", msg.String())
 	block := cbft.blockTree.FindBlockByHash(msg.BlockHash)
 	if block == nil {
@@ -376,7 +383,7 @@ func (cbft *Cbft) OnPrepareBlockHash(id string, msg *protocols.PrepareBlockHash)
 //
 // The Epoch and viewNumber of viewChange must be consistent
 // with the state of the current node.
-func (cbft *Cbft) OnGetViewChange(id string, msg *protocols.GetViewChange) error {
+func (cbft *Cbft) OnGetViewChange(id string, msg *protocols.GetViewChange) *MsgHandleError {
 	cbft.log.Debug("Received message on OnGetViewChange", "from", id, "msgHash", msg.MsgHash(), "message", msg.String(), "local", cbft.state.ViewString())
 
 	localEpoch, localViewNumber := cbft.state.Epoch(), cbft.state.ViewNumber()
@@ -394,7 +401,11 @@ func (cbft *Cbft) OnGetViewChange(id string, msg *protocols.GetViewChange) error
 		node, err := cbft.validatorPool.GetValidatorByNodeID(cbft.state.HighestQCBlock().NumberU64(), cbft.config.Option.NodeID)
 		if err != nil {
 			cbft.log.Error("Get validator error, get view change failed", "err", err)
-			return fmt.Errorf("get validator failed")
+			return &MsgHandleError{
+				err:        fmt.Errorf("get validator failed"),
+				disconnect: false,
+				verifySign: false,
+			}
 		}
 		viewChanges := cbft.state.AllViewChange()
 		if v, ok := viewChanges[uint32(node.Index)]; ok {
@@ -420,7 +431,7 @@ func (cbft *Cbft) OnGetViewChange(id string, msg *protocols.GetViewChange) error
 		err := lastViewChangeQC.EqualAll(msg.Epoch, msg.ViewNumber)
 		if err != nil {
 			cbft.log.Error("Last view change is not equal msg.viewNumber", "err", err)
-			return err
+			return &MsgHandleError{err: err, disconnect: false, verifySign: false}
 		}
 		cbft.network.Send(id, &protocols.ViewChangeQuorumCert{
 			ViewChangeQC: lastViewChangeQC,
@@ -428,10 +439,14 @@ func (cbft *Cbft) OnGetViewChange(id string, msg *protocols.GetViewChange) error
 		return nil
 	}
 
-	return fmt.Errorf("request is not match local view, local:%s,msg:%s", cbft.state.ViewString(), msg.String())
+	return &MsgHandleError{
+		err:        fmt.Errorf("request is not match local view, local:%s,msg:%s", cbft.state.ViewString(), msg.String()),
+		disconnect: false,
+		verifySign: false,
+	}
 }
 
-func (cbft *Cbft) OnViewChangeQuorumCert(id string, msg *protocols.ViewChangeQuorumCert) {
+func (cbft *Cbft) OnViewChangeQuorumCert(id string, msg *protocols.ViewChangeQuorumCert) *MsgHandleError {
 	cbft.log.Debug("Received message on OnViewChangeQuorumCert", "from", id, "msgHash", msg.MsgHash(), "message", msg.String())
 	viewChangeQC := msg.ViewChangeQC
 	epoch, viewNumber, _, _ := viewChangeQC.MaxBlock()
@@ -440,8 +455,10 @@ func (cbft *Cbft) OnViewChangeQuorumCert(id string, msg *protocols.ViewChangeQuo
 			cbft.tryChangeViewByViewChange(msg.ViewChangeQC)
 		} else {
 			cbft.log.Debug("Verify ViewChangeQC failed", "err", err)
+			return &MsgHandleError{err: err, disconnect: true, verifySign: true}
 		}
 	}
+	return nil
 }
 
 // Returns the node ID of the missing vote.
