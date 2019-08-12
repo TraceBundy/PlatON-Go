@@ -237,6 +237,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	eth.miner = miner.New(eth, eth.chainConfig, minningConfig, eth.EventMux(), eth.engine, config.MinerRecommit,
 		config.MinerGasFloor, config.MinerGasCeil, eth.isLocalBlock, blockChainCache)
 	eth.miner.SetExtra(makeExtraData(config.MinerExtraData))
+	eth.miner.SetCoinbase(config.CbftConfig.NodeID)
 
 	if engine, ok := eth.engine.(consensus.Bft); ok {
 

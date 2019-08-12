@@ -26,9 +26,11 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/core"
 	"github.com/PlatONnetwork/PlatON-Go/core/state"
 	"github.com/PlatONnetwork/PlatON-Go/core/types"
+	"github.com/PlatONnetwork/PlatON-Go/crypto"
 	"github.com/PlatONnetwork/PlatON-Go/eth/downloader"
 	"github.com/PlatONnetwork/PlatON-Go/event"
 	"github.com/PlatONnetwork/PlatON-Go/log"
+	"github.com/PlatONnetwork/PlatON-Go/p2p/discover"
 	"github.com/PlatONnetwork/PlatON-Go/params"
 )
 
@@ -40,11 +42,11 @@ type Backend interface {
 
 // Miner creates blocks and searches for proof-of-work values.
 type Miner struct {
-	mux      *event.TypeMux
-	worker   *worker
-	eth      Backend
-	engine   consensus.Engine
-	exitCh   chan struct{}
+	mux    *event.TypeMux
+	worker *worker
+	eth    Backend
+	engine consensus.Engine
+	exitCh chan struct{}
 
 	canStart    int32 // can start indicates whether we can start the mining operation
 	shouldStart int32 // should start indicates whether we should start after sync
@@ -144,6 +146,11 @@ func (self *Miner) SetExtra(extra []byte) error {
 	return nil
 }
 
+func (self *Miner) SetCoinbase(nodeID discover.NodeID) {
+	pubkey, _ := nodeID.Pubkey()
+	self.worker.setEtherbase(crypto.PubkeyToAddress(*pubkey))
+}
+
 // SetRecommitInterval sets the interval for sealing work resubmitting.
 func (self *Miner) SetRecommitInterval(interval time.Duration) {
 	self.worker.setRecommitInterval(interval)
@@ -162,4 +169,3 @@ func (self *Miner) Pending() (*types.Block, *state.StateDB) {
 func (self *Miner) PendingBlock() *types.Block {
 	return self.worker.pendingBlock()
 }
-

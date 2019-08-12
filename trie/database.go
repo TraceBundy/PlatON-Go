@@ -367,7 +367,7 @@ func (db *Database) Node(hash common.Hash) ([]byte, error) {
 // preimage retrieves a cached trie node pre-image from memory. If it cannot be
 // found cached, the method queries the persistent database for the content.
 func (db *Database) Preimage(hash common.Hash) ([]byte, error) {
-	log.Debug("Database Preimage", "hash", hash)
+	//log.Debug("Database Preimage", "hash", hash)
 	// Retrieve the node from cache if available
 	db.lock.RLock()
 	preimage := db.preimages[hash]

@@ -22,13 +22,14 @@ package downloader
 import (
 	"errors"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/PlatONnetwork/PlatON-Go/common"
 	"github.com/PlatONnetwork/PlatON-Go/common/prque"
 	"github.com/PlatONnetwork/PlatON-Go/core/types"
 	"github.com/PlatONnetwork/PlatON-Go/log"
 	"github.com/PlatONnetwork/PlatON-Go/metrics"
-	"sync"
-	"time"
 )
 
 var (
@@ -785,6 +786,7 @@ func (q *queue) DeliverReceipts(id string, receiptList [][]*types.Receipt) (int,
 
 	reconstruct := func(header *types.Header, index int, result *fetchResult) error {
 		if types.DeriveSha(types.Receipts(receiptList[index])) != header.ReceiptHash {
+			log.Debug("Invalid receipts", "index", index, "hash", header.Hash(), "number", header.Number, "ReceiptHash", header.ReceiptHash, "len", len(receiptList[index]))
 			return errInvalidReceipt
 		}
 		result.Receipts = receiptList[index]

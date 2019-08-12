@@ -566,6 +566,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			if encoded, err := rlp.EncodeToBytes(results); err != nil {
 				log.Error("Failed to encode receipt", "err", err)
 			} else {
+				log.Debug("Get receipts", "hash", hash, "receipts", len(results))
 				receipts = append(receipts, encoded)
 				bytes += len(encoded)
 			}
