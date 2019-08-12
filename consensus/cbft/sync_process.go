@@ -387,7 +387,6 @@ func (cbft *Cbft) MissingViewChangeNodes() (*protocols.GetViewChange, error) {
 		if _, ok := allViewChange[i]; !ok {
 			vbits.SetIndex(i, true)
 		}
-		nodeIndexes = append(nodeIndexes, index)
 	}
 
 	return &protocols.GetViewChange{
