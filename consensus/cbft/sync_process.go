@@ -133,6 +133,7 @@ func (cbft *Cbft) OnGetPrepareBlock(id string, msg *protocols.GetPrepareBlock) e
 func (cbft *Cbft) OnGetBlockQuorumCert(id string, msg *protocols.GetBlockQuorumCert) error {
 	_, qc := cbft.blockTree.FindBlockAndQC(msg.BlockHash, msg.BlockNumber)
 	if qc != nil {
+		cbft.Debug("[prepareblock] OnGetBlockQuorumCert", "msg", msg.String())
 		cbft.network.Send(id, &protocols.BlockQuorumCert{BlockQC: qc})
 	}
 	return nil
@@ -153,7 +154,7 @@ func (cbft *Cbft) OnBlockQuorumCert(id string, msg *protocols.BlockQuorumCert) e
 	if err := cbft.verifyPrepareQC(msg.BlockQC); err != nil {
 		return &authFailedError{err}
 	}
-
+	cbft.Debug("[prepareblock] OnBlockQuorumCert", "msg", msg.String())
 	cbft.insertPrepareQC(msg.BlockQC)
 	return nil
 }
@@ -305,6 +306,7 @@ func (cbft *Cbft) OnPrepareBlockHash(id string, msg *protocols.PrepareBlockHash)
 		block := cbft.state.ViewBlockByIndex(msg.BlockIndex)
 		if block == nil {
 			cbft.log.Debug("Send GetPrepareBlock", "peer", id, "block", msg.String())
+			cbft.Debug("[prepareblock] GetPrepareBlock", "msg", msg.String())
 			cbft.network.Send(id, &protocols.GetPrepareBlock{
 				Epoch:      msg.Epoch,
 				ViewNumber: msg.ViewNumber,
@@ -343,6 +345,7 @@ func (cbft *Cbft) OnGetViewChange(id string, msg *protocols.GetViewChange) error
 		}
 		cbft.log.Debug("Send ViewChanges", "peer", id, "len", len(vcs.VCs))
 		if len(vcs.VCs) != 0 {
+			cbft.Debug("[viewchange] send viewchange array", "msg", vcs.String())
 			cbft.network.Send(id, vcs)
 		}
 		return nil
@@ -359,6 +362,8 @@ func (cbft *Cbft) OnGetViewChange(id string, msg *protocols.GetViewChange) error
 			cbft.log.Error("Last view change is not equal msg.viewNumber", "err", err)
 			return err
 		}
+		cbft.Debug("[viewchange] send viewchange qc", "msg", lastViewChangeQC.String())
+
 		cbft.network.Send(id, &protocols.ViewChangeQuorumCert{
 			ViewChangeQC: lastViewChangeQC,
 		})
@@ -371,6 +376,7 @@ func (cbft *Cbft) OnGetViewChange(id string, msg *protocols.GetViewChange) error
 // OnViewChangeQuorumCert handles the message type of ViewChangeQuorumCertMsg.
 func (cbft *Cbft) OnViewChangeQuorumCert(id string, msg *protocols.ViewChangeQuorumCert) error {
 	cbft.log.Debug("Received message on OnViewChangeQuorumCert", "from", id, "msgHash", msg.MsgHash(), "message", msg.String())
+	cbft.Debug("[viewchange] viewchange qc", "msg", msg.String())
 	viewChangeQC := msg.ViewChangeQC
 	epoch, viewNumber, _, _, _, _ := viewChangeQC.MaxBlock()
 	if cbft.state.Epoch() == epoch && cbft.state.ViewNumber() == viewNumber {
@@ -387,6 +393,7 @@ func (cbft *Cbft) OnViewChangeQuorumCert(id string, msg *protocols.ViewChangeQuo
 // OnViewChanges handles the message type of ViewChangesMsg.
 func (cbft *Cbft) OnViewChanges(id string, msg *protocols.ViewChanges) error {
 	cbft.log.Debug("Received message on OnViewChanges", "from", id, "msgHash", msg.MsgHash(), "message", msg.String())
+	cbft.Debug("[viewchange] viewchange array", "msg", msg.String())
 	for _, v := range msg.VCs {
 		if err := cbft.OnViewChange(id, v); err != nil {
 			cbft.log.Error("OnViewChanges failed", "peer", id, "err", err)
@@ -426,6 +433,7 @@ func (cbft *Cbft) MissingViewChangeNodes() (v *protocols.GetViewChange, err erro
 			ViewNumber:     cbft.state.ViewNumber(),
 			ViewChangeBits: vbits,
 		}, nil
+		cbft.Debug("[viewchange] getviewchange", "msg", v.String())
 	}
 	<-result
 	return

@@ -1416,3 +1416,7 @@ func (cbft *Cbft) avgRTT() time.Duration {
 	}
 	return rtt
 }
+
+func (cbft *Cbft) Debug(msg string, ctx ...interface{}) {
+	cbft.log.Debug(msg, ctx)
+}

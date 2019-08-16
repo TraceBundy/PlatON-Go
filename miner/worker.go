@@ -588,6 +588,7 @@ func (w *worker) resultLoop() {
 	for {
 		select {
 		case obj := <-w.bftResultSub.Chan():
+			start := time.Now()
 			if obj == nil {
 				//log.Error("receive nil maybe channel is closed")
 				continue
@@ -671,7 +672,7 @@ func (w *worker) resultLoop() {
 				continue
 			}
 			//cbftResult.SyncState <- err
-			log.Info("Successfully write new block", "hash", block.Hash(), "number", block.NumberU64(), "coinbase", block.Coinbase(), "time", block.Time())
+			log.Info("[writeblock]Successfully write new block", "hash", block.Hash(), "number", block.NumberU64(), "coinbase", block.Coinbase(), "time", block.Time(), "duration", time.Since(start))
 
 			// Broadcast the block and announce chain insertion event
 			w.mux.Post(core.NewMinedBlockEvent{Block: block})

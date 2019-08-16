@@ -63,6 +63,7 @@ func (cbft *Cbft) OnPrepareBlock(id string, msg *protocols.PrepareBlock) HandleE
 	cbft.state.AddPrepareBlock(msg)
 	cbft.prepareBlockFetchRules(id, msg)
 	cbft.findExecutableBlock()
+	cbft.Debug("[prepareblock]", "block", msg.String())
 	return nil
 }
 
@@ -102,6 +103,7 @@ func (cbft *Cbft) OnPrepareVote(id string, msg *protocols.PrepareVote) HandleErr
 	cbft.log.Debug("Add prepare vote", "msgHash", msg.MsgHash(), "blockIndex", msg.BlockIndex, "number", msg.BlockNumber, "hash", msg.BlockHash, "votes", cbft.state.PrepareVoteLenByIndex(msg.BlockIndex))
 
 	cbft.findQCBlock()
+	cbft.Debug("[preparevote] receive", "blockIndex", msg.BlockIndex, "number", msg.BlockNumber, "hash", msg.BlockHash, "votes", cbft.state.PrepareVoteLenByIndex(msg.BlockIndex))
 	return nil
 }
 
@@ -170,6 +172,7 @@ func (cbft *Cbft) OnViewTimeout() {
 
 	cbft.network.Broadcast(viewChange)
 	cbft.tryChangeView()
+	cbft.Debug("[viewchange] timeout", "time", time.Now())
 }
 
 // OnInsertQCBlock performs security rule verification, view switching.
@@ -206,7 +209,9 @@ func (cbft *Cbft) insertQCBlock(block *types.Block, qc *ctypes.QuorumCert) {
 
 	lock, commit := cbft.blockTree.InsertQCBlock(block, qc)
 	cbft.state.SetHighestQCBlock(block)
+	start := time.Now()
 	cbft.txPool.Reset(block)
+	cbft.Debug("[resettxpool]", "duration", time.Since(start), "hash", block.Hash(), "number", block.NumberU64())
 	cbft.tryCommitNewBlock(lock, commit)
 	cbft.tryChangeView()
 	if cbft.insertBlockQCHook != nil {
@@ -245,6 +250,8 @@ func (cbft *Cbft) insertPrepareQC(qc *ctypes.QuorumCert) {
 // Asynchronous execution block callback function
 func (cbft *Cbft) onAsyncExecuteStatus(s *executor.BlockExecuteStatus) {
 	cbft.log.Debug("Async Execute Block", "hash", s.Hash, "number", s.Number)
+	cbft.Debug("[prepareblock] exeblock", "hash", s.Hash, "number", s.Number)
+
 	if s.Err != nil {
 		cbft.log.Error("Execute block failed", "err", s.Err, "hash", s.Hash, "number", s.Number)
 		return
@@ -353,6 +360,7 @@ func (cbft *Cbft) findExecutableBlock() {
 			}
 
 			cbft.log.Debug("Find Executable Block", "hash", block.Hash(), "number", block.NumberU64())
+			cbft.Debug("[prepareblock] exeing", "hash", block.Hash(), "number", block.NumberU64())
 			if err := cbft.asyncExecutor.Execute(block, parent); err != nil {
 				cbft.log.Error("Async Execute block failed", "error", err)
 			}
@@ -368,6 +376,7 @@ func (cbft *Cbft) findExecutableBlock() {
 				cbft.log.Error(fmt.Sprintf("Find executable block's parent failed :[%d,%d,%s]", blockIndex, block.NumberU64(), block.Hash()))
 				return
 			}
+			cbft.Debug("[prepareblock] exeing", "hash", block.Hash(), "number", block.NumberU64())
 
 			if err := cbft.asyncExecutor.Execute(block, parent); err != nil {
 				cbft.log.Error("Async Execute block failed", "error", err)
@@ -395,6 +404,8 @@ func (cbft *Cbft) findQCBlock() {
 		// metrics
 		blockQCCollectedTimer.UpdateSince(time.Unix(block.Time().Int64(), 0))
 		cbft.trySendPrepareVote()
+		cbft.Debug("[preparevote] hadqc", "hash", block.Hash(), "number", block.NumberU64())
+
 	}
 
 	cbft.tryChangeView()
@@ -406,6 +417,7 @@ func (cbft *Cbft) tryCommitNewBlock(lock *types.Block, commit *types.Block) {
 		cbft.log.Warn("Try commit failed", "hadLock", lock != nil, "hadCommit", commit != nil)
 		return
 	}
+	start := time.Now()
 	highestqc := cbft.state.HighestQCBlock()
 	_, oldCommit := cbft.state.HighestLockBlock(), cbft.state.HighestCommitBlock()
 
@@ -427,6 +439,7 @@ func (cbft *Cbft) tryCommitNewBlock(lock *types.Block, commit *types.Block) {
 		qcBlock, qcQC := cbft.blockTree.FindBlockAndQC(highestqc.Hash(), highestqc.NumberU64())
 		cbft.bridge.UpdateChainState(&protocols.State{qcBlock, qcQC}, nil, nil)
 	}
+	cbft.Debug("[commitblock]", "duration", time.Since(start), "number", commit.Number(), "hash", commit.Hash())
 }
 
 // According to the current view QC situation, try to switch view
