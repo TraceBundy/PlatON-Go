@@ -1418,5 +1418,5 @@ func (cbft *Cbft) avgRTT() time.Duration {
 }
 
 func (cbft *Cbft) Debug(msg string, ctx ...interface{}) {
-	cbft.log.Debug(msg, ctx)
+	cbft.log.Debug(msg, ctx...)
 }
