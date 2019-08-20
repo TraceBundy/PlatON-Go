@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/PlatONnetwork/PlatON-Go/core/state"
+
 	"github.com/PlatONnetwork/PlatON-Go/consensus/cbft/utils"
 
 	"github.com/PlatONnetwork/PlatON-Go/common"
@@ -138,8 +140,12 @@ func (ia *InnerAgency) GetLastNumber(blockNumber uint64) uint64 {
 		// via `blockNumber`.
 		if lastBlockNumber < blockNumber {
 			blocksPerRound := ia.blocksPerNode * uint64(vds.Len())
-			baseNum := blockNumber - (blockNumber % blocksPerRound)
-			lastBlockNumber = baseNum + blocksPerRound
+			if blockNumber%blocksPerRound == 0 {
+				lastBlockNumber = blockNumber
+			} else {
+				baseNum := blockNumber - (blockNumber % blocksPerRound)
+				lastBlockNumber = baseNum + blocksPerRound
+			}
 		}
 	}
 	//log.Debug("Get last block number", "blockNumber", blockNumber, "lastBlockNumber", lastBlockNumber)
