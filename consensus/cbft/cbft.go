@@ -281,7 +281,7 @@ func (cbft *Cbft) ReceiveMessage(msg *ctypes.MsgInfo) error {
 	// Repeat filtering on consensus messages.
 	// First check.
 	if cbft.network.ContainsHistoryMessageHash(msg.Msg.MsgHash()) {
-		cbft.log.Error("Processed message for ReceiveMessage, no need to process", "msgHash", msg.Msg.MsgHash())
+		cbft.log.Trace("Processed message for ReceiveMessage, no need to process", "msgHash", msg.Msg.MsgHash())
 		cbft.forgetMessage(msg.PeerID)
 		return nil
 	}
@@ -433,7 +433,7 @@ func (cbft *Cbft) receiveLoop() {
 			if err == nil {
 				cbft.network.MarkHistoryMessageHash(msg.Msg.MsgHash())
 				if err := cbft.network.Forwarding(msg.PeerID, msg.Msg); err != nil {
-					cbft.log.Warn("Forward message failed", "err", err)
+					cbft.log.Debug("Forward message failed", "err", err)
 				}
 			} else if err.AuthFailed() {
 				// If the verification signature is abnormal,
@@ -444,7 +444,7 @@ func (cbft *Cbft) receiveLoop() {
 				cbft.network.RemovePeer(msg.PeerID)
 			}
 		} else {
-			cbft.log.Debug("The message has been processed, discard it", "msgHash", msg.Msg.MsgHash(), "peerID", msg.PeerID)
+			cbft.log.Trace("The message has been processed, discard it", "msgHash", msg.Msg.MsgHash(), "peerID", msg.PeerID)
 		}
 		cbft.forgetMessage(msg.PeerID)
 	}
