@@ -13,12 +13,14 @@ GO ?= latest
 
 platon:
 	build/build_deps.sh
+	build/build_bls.sh
 	build/env.sh go run build/ci.go install ./cmd/platon
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/platon\" to launch platon."
 
 platon-with-mpc:
 	build/build_deps.sh
+	build/build_bls.sh
 	build/env.sh go run build/ci.go install -mpc on ./cmd/platon
 	@echo "Done building platon with mpc."
 	@echo "Run \"$(GOBIN)/platon\" to launch platon."
@@ -26,6 +28,7 @@ platon-with-mpc:
 platon-with-vc:
 	build/build_deps.sh
 	build/build_snark.sh
+	build/build_bls.sh
 	build/env.sh go run build/ci.go install -vc on ./cmd/platon
 	@echo "Done building platon with vc."
 	@echo "Run \"$(GOBIN)/platon\" to launch platon."
@@ -33,6 +36,7 @@ platon-with-vc:
 platon-with-mv:
 	build/build_deps.sh
 	build/build_snark.sh
+	build/build_bls.sh
 	build/env.sh go run build/ci.go install -mv on ./cmd/platon
 	@echo "Done building platon with vc."
 	@echo "Run \"$(GOBIN)/platon\" to launch platon."
@@ -44,24 +48,29 @@ swarm:
 
 all:
 	build/build_deps.sh
+	build/build_bls.sh
 	build/env.sh go run build/ci.go install
 
 all-debug:
 	build/build_deps.sh
+	build/build_bls.sh
 	build/env.sh go run build/ci.go install -gcflags on
 
 all-with-mpc:
 	build/build_deps.sh
+	build/build_bls.sh
 	build/env.sh go run build/ci.go install -mpc on
 
 all-with-vc:
 	build/build_deps.sh
 	build/build_snark.sh
+	build/build_bls.sh
 	build/env.sh go run build/ci.go install -vc on
 
 all-with-mv:
 	build/build_deps.sh
 	build/build_snark.sh
+	build/build_bls.sh
 	build/env.sh go run build/ci.go install -mv on
 
 android:
