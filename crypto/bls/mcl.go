@@ -3,7 +3,13 @@
 package bls
 
 /*
-#cgo CFLAGS:-DMCLBN_FP_UNIT_SIZE=6
+#cgo linux LDFLAGS:-L${SRCDIR}/linux/lib
+#cgo windows LDFLAGS: -L${SRCDIR}/win-x64/lib
+#cgo windows CFLAGS: -I${SRCDIR}/win-x64/include
+#cgo windows LDFLAGS:-lmclbn256 -lbls_c256
+#cgo CFLAGS: -I${SRCDIR}/linux/include
+#cgo CFLAGS:-DMCLBN_FP_UNIT_SIZE=4
+#cgo LDFLAGS:-lmclbn256 -lbls256
 #include <mcl/bn.h>
 #include <bls/bls.h>
 */

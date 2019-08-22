@@ -3,8 +3,9 @@
 package bls
 
 /*
+#cgo CFLAGS: -I${SRCDIR}/linux/include
 #cgo CFLAGS:-DMCLBN_FP_UNIT_SIZE=6
-#cgo LDFLAGS:-lbls384 -lgmpxx -lstdc++ -lgmp -lcrypto
+#cgo LDFLAGS:-lbls256 -lgmpxx -lstdc++ -lgmp -lcrypto
 #include <bls/bls.h>
 */
 import "C"
