@@ -1,4 +1,4 @@
-// +build linux darwin
+// +build linux darwin windows
 
 package bls
 
@@ -9,7 +9,7 @@ package bls
 #cgo windows LDFLAGS:-lmclbn384 -lbls_c384
 #cgo CFLAGS: -I${SRCDIR}/linux/include
 #cgo CFLAGS:-DMCLBN_FP_UNIT_SIZE=6
-#cgo LDFLAGS:-lmclbn384 -lbls384
+#cgo linux LDFLAGS:-lmclbn384 -lbls384
 #include <mcl/bn.h>
 #include <bls/bls.h>
 */

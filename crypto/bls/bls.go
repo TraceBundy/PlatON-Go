@@ -1,9 +1,12 @@
 package bls
 
 /*
-#cgo CFLAGS: -I${SRCDIR}/linux/include
+#cgo linux CFLAGS: -I${SRCDIR}/linux/include
+#cgo windows CFLAGS: -I${SRCDIR}/win-x64/include
+#cgo windows LDFLAGS: -L${SRCDIR}/win-x64/lib
 #cgo CFLAGS:-DMCLBN_FP_UNIT_SIZE=6
-#cgo LDFLAGS:-lbls384 -lgmpxx -lstdc++ -lgmp -lcrypto
+#cgo linux LDFLAGS:-lbls384 -lgmpxx -lstdc++ -lgmp -lcrypto
+#cgo windows LDFLAGS:-lmclbn384 -lbls_c384
 #include <bls/bls.h>
 */
 import "C"
@@ -12,7 +15,7 @@ import (
 	"unsafe"
 	"errors"
 	"bytes"
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/PlatONnetwork/PlatON-Go/crypto"
 	"strings"
 )
 
