@@ -5,18 +5,23 @@ package bls
 #cgo windows CFLAGS: -I${SRCDIR}/win-x64/include
 #cgo windows LDFLAGS: -L${SRCDIR}/win-x64/lib
 #cgo CFLAGS:-DMCLBN_FP_UNIT_SIZE=6
-#cgo linux LDFLAGS:-lbls384 -lgmpxx -lstdc++ -lgmp -lcrypto
+#cgo linux LDFLAGS:-lbls384 -lmcl -lgmp -lgmpxx -lstdc++ -lcrypto
 #cgo windows LDFLAGS:-lmclbn384 -lbls_c384
 #include <bls/bls.h>
+#include <mcl/bn.h>
 */
 import "C"
-import "fmt"
 import (
-	"unsafe"
-	"errors"
 	"bytes"
-	"github.com/PlatONnetwork/PlatON-Go/crypto"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"io"
+	"os"
 	"strings"
+	"unsafe"
+
+	"github.com/PlatONnetwork/PlatON-Go/crypto"
 )
 
 // Init --
@@ -85,6 +90,25 @@ type SecretKey struct {
 	v Fr
 }
 
+func LoadBLS(file string) (*SecretKey, error) {
+	buf := make([]byte, 64)
+	fd, err := os.Open(file)
+	if err != nil {
+		return nil, err
+	}
+	defer fd.Close()
+	if _, err := io.ReadFull(fd, buf); err != nil {
+		return nil, err
+	}
+	var sec SecretKey
+	key, err := hex.DecodeString(string(buf))
+	if err != nil {
+		return nil, err
+	}
+	err = sec.SetLittleEndian(key)
+	return &sec, err
+}
+
 // getPointer --
 func (sec *SecretKey) getPointer() (p *C.blsSecretKey) {
 	// #nosec
@@ -142,7 +166,7 @@ func (sec *SecretKey) Mul(rhs *SecretKey) {
 }
 
 // Sub --
-func (sec *SecretKey)Sub(rhs *SecretKey) {
+func (sec *SecretKey) Sub(rhs *SecretKey) {
 	FrSub(&sec.v, &sec.v, &rhs.v)
 }
 
@@ -226,7 +250,6 @@ func (pub *PublicKey) IsEqual(rhs *PublicKey) bool {
 	return pub.v.IsEqual(&rhs.v)
 }
 
-
 // Add --
 func (pub *PublicKey) Add(rhs *PublicKey) {
 	G2Add(&pub.v, &pub.v, &rhs.v)
@@ -236,7 +259,6 @@ func (pub *PublicKey) Add(rhs *PublicKey) {
 func (pub *PublicKey) Mul(rhs *SecretKey) {
 	G2Mul(&pub.v, &pub.v, &rhs.v)
 }
-
 
 // Set --
 func (pub *PublicKey) Set(mpk []PublicKey, id *ID) error {
@@ -248,6 +270,18 @@ func (pub *PublicKey) Set(mpk []PublicKey, id *ID) error {
 func (pub *PublicKey) Recover(pubVec []PublicKey, idVec []ID) error {
 	// #nosec
 	return G2LagrangeInterpolation(&pub.v, *(*[]Fr)(unsafe.Pointer(&idVec)), *(*[]G2)(unsafe.Pointer(&pubVec)))
+}
+
+func (pub *PublicKey) MarshalText() ([]byte, error) {
+	return []byte(fmt.Sprintf("%x", pub.Serialize())), nil
+}
+
+func (pub *PublicKey) UnmarshalText(text []byte) error {
+	key, err := hex.DecodeString(string(text))
+	if err != nil {
+		return err
+	}
+	return pub.Deserialize(key)
 }
 
 // Sign  --
@@ -340,9 +374,9 @@ func GetGeneratorOfG2() (pub *PublicKey) {
 }
 
 // PubBatchAdd --
-func PubkeyBatchAdd(pkVec []PublicKey) (pub PublicKey){
+func PubkeyBatchAdd(pkVec []PublicKey) (pub PublicKey) {
 	var pk PublicKey
-	for i := 0; i < len(pkVec);i++{
+	for i := 0; i < len(pkVec); i++ {
 		pk.Add(&pkVec[i])
 	}
 	fmt.Printf("pk=%s\n", pk.GetHexString())
@@ -352,7 +386,7 @@ func PubkeyBatchAdd(pkVec []PublicKey) (pub PublicKey){
 // SecBatchAdd --
 func SeckeyBatchAdd(secVec []SecretKey) (sec SecretKey) {
 	var sk SecretKey
-	for i := 0; i < len(secVec);i++{
+	for i := 0; i < len(secVec); i++ {
 		sk.Add(&secVec[i])
 	}
 	fmt.Printf("sec=%s\n", sk.GetHexString())
@@ -361,7 +395,7 @@ func SeckeyBatchAdd(secVec []SecretKey) (sec SecretKey) {
 
 func AggregateSign(sigVec []Sign) (sig Sign) {
 	var sign Sign
-	for i := 0; i < len(sigVec);i++{
+	for i := 0; i < len(sigVec); i++ {
 		sign.Add(&sigVec[i])
 	}
 	fmt.Printf("sig=%s\n", sign.GetHexString())
@@ -369,7 +403,7 @@ func AggregateSign(sigVec []Sign) (sig Sign) {
 }
 
 func GTBatchMul(eVec []GT) (e GT) {
-	var e1,e2 GT
+	var e1, e2 GT
 	e1 = eVec[0]
 	for j := 1; j < len(eVec); j++ {
 		e2 = eVec[j]
@@ -381,7 +415,7 @@ func GTBatchMul(eVec []GT) (e GT) {
 }
 
 func GTBatchAdd(eVec []GT) (e GT) {
-	var e1,e2 GT
+	var e1, e2 GT
 	e1 = eVec[0]
 	for j := 1; j < len(eVec); j++ {
 		e2 = eVec[j]
@@ -392,19 +426,18 @@ func GTBatchAdd(eVec []GT) (e GT) {
 	return e2
 }
 
-func MsgsToHashToG1(mVec []string) ( []Sign, error){
+func MsgsToHashToG1(mVec []string) ([]Sign, error) {
 	n := len(mVec)
 	p_Hm := make([]Sign, n)
 	for i := 0; i < n; i++ {
 		err := p_Hm[i].v.HashAndMapTo([]byte(mVec[i]))
 		if err != nil {
-			return []Sign{},err
+			return []Sign{}, err
 		}
-		fmt.Printf("p_Hm=%s\n",  p_Hm[i].GetHexString())
+		fmt.Printf("p_Hm=%s\n", p_Hm[i].GetHexString())
 	}
-	return p_Hm,nil
+	return p_Hm, nil
 }
-
 
 func BatchVerifySameMsg(curve int, msg string, pkVec []PublicKey, sign Sign) error {
 	err := Init(curve)
@@ -412,8 +445,8 @@ func BatchVerifySameMsg(curve int, msg string, pkVec []PublicKey, sign Sign) err
 		return err
 	}
 	/*	if len(pkVec) != len(signVec) {
-			return errors.New("sig/pub length not equal")
-		}*/
+		return errors.New("sig/pub length not equal")
+	}*/
 	var pk PublicKey
 	//	var sig Sign
 	for i := 0; i < len(pkVec); i++ {
@@ -433,7 +466,7 @@ func BatchVerifyDistinctMsg(curve int, pkVec []PublicKey, msgVec []Sign, sign Si
 	if err != nil {
 		return err
 	}
-	if len(pkVec) != len(msgVec)  {
+	if len(pkVec) != len(msgVec) {
 		return errors.New("pub/msg length not equal")
 	}
 	/*var sig Sign
@@ -461,50 +494,48 @@ func BatchVerifyDistinctMsg(curve int, pkVec []PublicKey, msgVec []Sign, sign Si
 	return nil
 }
 
-func SynthSameMsg(curve int, pkVec []PublicKey, mVec []string) ([]PublicKey,[]string,[]string,error) {
+func SynthSameMsg(curve int, pkVec []PublicKey, mVec []string) ([]PublicKey, []string, []string, error) {
 	err := Init(curve)
 	if err != nil {
-		return nil,nil,nil,err
+		return nil, nil, nil, err
 	}
 	pubMap := make(map[string]PublicKey)
 	mark := make(map[string]string)
-	for i := 0; i<len(mVec);i++ {
-		pub, ok := pubMap [mVec[i]]
-		if (ok) {
+	for i := 0; i < len(mVec); i++ {
+		pub, ok := pubMap[mVec[i]]
+		if ok {
 			pub.Add(&pkVec[i])
-			pubMap [ mVec[i] ] = pub
-			mark[mVec[i]] = mark[mVec[i]] +fmt.Sprintf(",%d",i)
+			pubMap[mVec[i]] = pub
+			mark[mVec[i]] = mark[mVec[i]] + fmt.Sprintf(",%d", i)
 		} else {
-			pubMap [ mVec[i] ] = pkVec[i]
-			mark[mVec[i]] = fmt.Sprintf("%d",i)
+			pubMap[mVec[i]] = pkVec[i]
+			mark[mVec[i]] = fmt.Sprintf("%d", i)
 		}
 	}
 	n := len(pubMap)
 	newPkVec := make([]PublicKey, n)
 	newMVec := make([]string, n)
-	var j int =0
+	var j int = 0
 	for k, v := range pubMap {
 		newMVec[j] = k
 		newPkVec[j] = v
 		j++
 	}
 	var index []string
-	for _,result := range mark {
-		if strings.Contains(result,","){
+	for _, result := range mark {
+		if strings.Contains(result, ",") {
 			index = append(index, result)
 		}
 	}
-	return newPkVec,newMVec,index,nil
+	return newPkVec, newMVec, index, nil
 }
-
 
 // IsValid --
-func  G2IsValid(rhs *PublicKey) bool {
-	return C.mclBnG2_isValid((&rhs.v).getPointer()) ==1
+func G2IsValid(rhs *PublicKey) bool {
+	return C.mclBnG2_isValid((&rhs.v).getPointer()) == 1
 }
 
-
-func Schnorr_test(curve int,r,c SecretKey,G,V,P PublicKey) error {
+func Schnorr_test(curve int, r, c SecretKey, G, V, P PublicKey) error {
 	err := Init(curve)
 	if err != nil {
 		return err
@@ -534,10 +565,10 @@ type Proof struct {
 	C, R SecretKey
 }
 
-func SchnorrNIZKProve(curve int,sec SecretKey) (*Proof,error) {
+func SchnorrNIZKProve(curve int, sec SecretKey) (*Proof, error) {
 	err := Init(curve)
 	if err != nil {
-		return nil,err
+		return nil, err
 	}
 	P := sec.GetPublicKey()
 	fmt.Printf("P=%s\n", P.GetHexString())
@@ -559,18 +590,18 @@ func SchnorrNIZKProve(curve int,sec SecretKey) (*Proof,error) {
 	buffer.Write(input1)
 	buffer.Write(input2)
 	buffer.Write(input3)
-	output :=buffer.Bytes()
+	output := buffer.Bytes()
 	h := crypto.Keccak256(output)
 	fmt.Printf("h=%x\n", h)
 	var c SecretKey
-	err =c.SetLittleEndian(h)
+	err = c.SetLittleEndian(h)
 	if err != nil {
 		fmt.Println("Deserialize fail")
-		return nil,err
+		return nil, err
 	}
-	temp :=sec
+	temp := sec
 	temp.Mul(&c)
-	r :=v
+	r := v
 	r.Sub(&temp)
 	fmt.Printf("r=%s\n", r.GetHexString())
 	fmt.Printf("c=%s\n", c.GetHexString())
@@ -580,7 +611,7 @@ func SchnorrNIZKProve(curve int,sec SecretKey) (*Proof,error) {
 	return proof, nil
 }
 
-func SchnorrNIZKVerify(curve int,proof Proof,P PublicKey) error{
+func SchnorrNIZKVerify(curve int, proof Proof, P PublicKey) error {
 	err := Init(curve)
 	if err != nil {
 		return err
@@ -613,11 +644,11 @@ func SchnorrNIZKVerify(curve int,proof Proof,P PublicKey) error{
 	buffer.Write(input1)
 	buffer.Write(input2)
 	buffer.Write(input3)
-	output :=buffer.Bytes()
+	output := buffer.Bytes()
 	h := crypto.Keccak256(output)
 	fmt.Printf("h=%x\n", h)
 	var c1 SecretKey
-	err =c1.SetLittleEndian(h)
+	err = c1.SetLittleEndian(h)
 	if err != nil {
 		return err
 	}
@@ -627,9 +658,3 @@ func SchnorrNIZKVerify(curve int,proof Proof,P PublicKey) error{
 	}
 	return nil
 }
-
-
-
-
-
-

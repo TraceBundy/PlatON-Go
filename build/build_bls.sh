@@ -36,15 +36,17 @@ set -e
 
 # Build and test bls lib
 MAKE="make"
-cd bls
-$MAKE test
+cd $BLS_ROOT/linux/src/bls
+$MAKE 
 
 # copy bls  header and lib files to destination directory
-cp -r ./include/bls $BLS_ROOT/linux/include/
-cp ./lib/*.a $BLS_ROOT/linux/lib/
+cp -r $BLS_ROOT/linux/src/bls/include/bls $BLS_ROOT/linux/include/
+rm -rf $BLS_ROOT/linux/src/bls/ffi
+cp $BLS_ROOT/linux/src/bls/lib/*.a $BLS_ROOT/linux/lib/
 
 # copy mcl header and lib files to destination directory
-cd ../mcl
-cp -r ./include/mcl $BLS_ROOT/linux/include/
-cp -r ./include/cybozu $BLS_ROOT/linux/include/
-cp ./lib/*.a $BLS_ROOT/linux/lib/
+cd $BLS_ROOT/linux/src/mcl
+rm -rf ffi
+cp -r $BLS_ROOT/linux/src/mcl/include/mcl $BLS_ROOT/linux/include/
+cp -r /$BLS_ROOT/linux/src/mcl/include/cybozu $BLS_ROOT/linux/include/
+cp $BLS_ROOT/linux/src/mcl/lib/*.a $BLS_ROOT/linux/lib/
