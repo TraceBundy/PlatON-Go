@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-if [ ! -f "build/build_deps.sh" ]; then
+if [ ! -f "build/build_bls.sh" ]; then
     echo "$0 must be run from the root of the repository."
     exit 2
 fi
@@ -36,15 +36,15 @@ set -e
 
 # Build and test bls lib
 MAKE="make"
-cd bls
-$MAKE test
+cd $BLS_ROOT/linux/src/bls
+$MAKE
 
 # copy bls  header and lib files to destination directory
 cp -r ./include/bls $BLS_ROOT/linux/include/
 cp ./lib/*.a $BLS_ROOT/linux/lib/
 
 # copy mcl header and lib files to destination directory
-cd ../mcl
+cd  $BLS_ROOT/linux/src/mcl
 cp -r ./include/mcl $BLS_ROOT/linux/include/
 cp -r ./include/cybozu $BLS_ROOT/linux/include/
 cp ./lib/*.a $BLS_ROOT/linux/lib/
