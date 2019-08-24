@@ -1,14 +1,7 @@
 package bls
 
 /*
-#cgo linux CFLAGS: -I${SRCDIR}/linux/include
-#cgo windows CFLAGS: -I${SRCDIR}/win-x64/include
-#cgo windows LDFLAGS: -L${SRCDIR}/win-x64/lib
-#cgo CFLAGS:-DMCLBN_FP_UNIT_SIZE=6
-#cgo linux LDFLAGS:-lbls384 -lmcl -lgmp -lgmpxx -lstdc++ -lcrypto
-#cgo windows LDFLAGS:-lmclbn384 -lbls_c384
 #include <bls/bls.h>
-#include <mcl/bn.h>
 */
 import "C"
 import (
