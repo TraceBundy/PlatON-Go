@@ -10,7 +10,7 @@ BLS_ROOT=$PLATON_ROOT/crypto/bls
 
 if [ `expr substr $(uname -s) 1 5` != "Linux" ]; then
     echo "not support system $(uname -s)"
-    exit 1
+    exit 0
 fi
 
 # sudo apt install libgmp-dev
