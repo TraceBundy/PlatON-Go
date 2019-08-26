@@ -4,7 +4,7 @@ import "testing"
 import (
 	"strconv"
 	"fmt"
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/PlatONnetwork/PlatON-Go/crypto"
 	"bytes"
 )
 
