@@ -4,7 +4,7 @@ package bls
 #cgo linux LDFLAGS:-L${SRCDIR}/linux/lib
 #cgo windows CFLAGS: -I${SRCDIR}/win-x64/include
 #cgo windows LDFLAGS: -L${SRCDIR}/win-x64/lib
-#cgo windows LDFLAGS: -lbls_c384 -lmclbn384 -lmcl -lgmp -lgmpxx -lstdc++ -lcrypto
+#cgo windows LDFLAGS: -lbls384 -lmclbn384
 #cgo linux CFLAGS: -I${SRCDIR}/linux/include
 #cgo windows CFLAGS:-DMCLBN_FP_UNIT_SIZE=6
 #cgo linux CFLAGS:-DMCLBN_FP_UNIT_SIZE=6
