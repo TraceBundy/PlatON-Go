@@ -20,8 +20,8 @@ const (
 
 // DuplicatePrepareBlockEvidence recording duplicate blocks
 type DuplicatePrepareBlockEvidence struct {
-	PrepareA *EvidencePrepare `json:"prepare_a"`
-	PrepareB *EvidencePrepare `json:"prepare_b"`
+	PrepareA *EvidencePrepare
+	PrepareB *EvidencePrepare
 }
 
 func (d DuplicatePrepareBlockEvidence) BlockNumber() uint64 {
@@ -83,7 +83,7 @@ func (d DuplicatePrepareBlockEvidence) Validate() error {
 		return fmt.Errorf("DuplicatePrepareBlockEvidence, validator do not match, prepareA:%s, prepareB:%s", validateNodeA.Address, validateNodeB.Address)
 	}
 	if d.PrepareA.BlockHash == d.PrepareB.BlockHash {
-		return fmt.Errorf("DuplicatePrepareBlockEvidence, blockHash is equal, prepareA:%s, prepareB:%s", d.PrepareA.BlockHash.String(), d.PrepareB.BlockHash.String())
+		return fmt.Errorf("DuplicatePrepareBlockEvidence, blockHash is equal, prepareA:%s, prepareB:%s", d.PrepareA.BlockHash, d.PrepareB.BlockHash)
 	}
 	// Verify consensus msg signature
 	if err := d.PrepareA.Verify(); err != nil {
@@ -103,15 +103,10 @@ func (d DuplicatePrepareBlockEvidence) Type() consensus.EvidenceType {
 	return DuplicatePrepareBlockType
 }
 
-func (d DuplicatePrepareBlockEvidence) ValidateMsg() bool {
-	return d.PrepareA != nil && d.PrepareA.ValidateNode != nil && d.PrepareA.ValidateNode.BlsPubKey != nil &&
-		d.PrepareB != nil && d.PrepareB.ValidateNode != nil && d.PrepareB.ValidateNode.BlsPubKey != nil
-}
-
 // DuplicatePrepareVoteEvidence recording duplicate vote
 type DuplicatePrepareVoteEvidence struct {
-	VoteA *EvidenceVote `json:"vote_a"`
-	VoteB *EvidenceVote `json:"vote_b"`
+	VoteA *EvidenceVote
+	VoteB *EvidenceVote
 }
 
 func (d DuplicatePrepareVoteEvidence) BlockNumber() uint64 {
@@ -173,7 +168,7 @@ func (d DuplicatePrepareVoteEvidence) Validate() error {
 		return fmt.Errorf("DuplicatePrepareVoteEvidence, validator do not match, voteA:%s, voteB:%s", validateNodeA.Address, validateNodeB.Address)
 	}
 	if d.VoteA.BlockHash == d.VoteB.BlockHash {
-		return fmt.Errorf("DuplicatePrepareVoteEvidence, blockHash is equal, voteA:%s, voteB:%s", d.VoteA.BlockHash.String(), d.VoteB.BlockHash.String())
+		return fmt.Errorf("DuplicatePrepareVoteEvidence, blockHash is equal, voteA:%s, voteB:%s", d.VoteA.BlockHash, d.VoteB.BlockHash)
 	}
 	// Verify consensus msg signature
 	if err := d.VoteA.Verify(); err != nil {
@@ -193,15 +188,10 @@ func (d DuplicatePrepareVoteEvidence) Type() consensus.EvidenceType {
 	return DuplicatePrepareVoteType
 }
 
-func (d DuplicatePrepareVoteEvidence) ValidateMsg() bool {
-	return d.VoteA != nil && d.VoteA.ValidateNode != nil && d.VoteA.ValidateNode.BlsPubKey != nil &&
-		d.VoteB != nil && d.VoteB.ValidateNode != nil && d.VoteB.ValidateNode.BlsPubKey != nil
-}
-
 // DuplicateViewChangeEvidence recording duplicate viewChange
 type DuplicateViewChangeEvidence struct {
-	ViewA *EvidenceView `json:"view_a"`
-	ViewB *EvidenceView `json:"view_b"`
+	ViewA *EvidenceView
+	ViewB *EvidenceView
 }
 
 func (d DuplicateViewChangeEvidence) BlockNumber() uint64 {
@@ -260,7 +250,7 @@ func (d DuplicateViewChangeEvidence) Validate() error {
 		return fmt.Errorf("DuplicateViewChangeEvidence, validator do not match, viewA:%s, viewB:%s", validateNodeA.Address, validateNodeB.Address)
 	}
 	if d.ViewA.BlockNumber == d.ViewB.BlockNumber && d.ViewA.BlockHash == d.ViewB.BlockHash {
-		return fmt.Errorf("DuplicateViewChangeEvidence, blockNumber and blockHash is equal, viewANumber:%d, viewAHash:%s, viewANumber:%d, viewBHash:%s", d.ViewA.BlockNumber, d.ViewA.BlockHash.String(), d.ViewB.BlockNumber, d.ViewB.BlockHash.String())
+		return fmt.Errorf("DuplicateViewChangeEvidence, blockNumber and blockHash is equal, viewANumber:%d, viewAHash:%s, viewANumber:%d, viewBHash:%s", d.ViewA.BlockNumber, d.ViewA.BlockHash, d.ViewB.BlockNumber, d.ViewB.BlockHash)
 	}
 	// Verify consensus msg signature
 	if err := d.ViewA.Verify(); err != nil {
@@ -278,11 +268,6 @@ func (d DuplicateViewChangeEvidence) Address() common.Address {
 
 func (d DuplicateViewChangeEvidence) Type() consensus.EvidenceType {
 	return DuplicateViewChangeType
-}
-
-func (d DuplicateViewChangeEvidence) ValidateMsg() bool {
-	return d.ViewA != nil && d.ViewA.ValidateNode != nil && d.ViewA.ValidateNode.BlsPubKey != nil &&
-		d.ViewB != nil && d.ViewB.ValidateNode != nil && d.ViewB.ValidateNode.BlsPubKey != nil
 }
 
 // EvidenceData encapsulate externally visible duplicate data

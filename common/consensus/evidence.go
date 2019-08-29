@@ -4,7 +4,7 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/common"
 )
 
-type EvidenceType uint8
+type EvidenceType int32
 
 type Evidence interface {
 	//Verify(ecdsa.PublicKey) error
@@ -17,7 +17,6 @@ type Evidence interface {
 	Address() common.Address
 	Validate() error
 	Type() EvidenceType
-	ValidateMsg() bool
 }
 
 type Evidences []Evidence
