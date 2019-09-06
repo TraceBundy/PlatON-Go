@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"math"
 	"math/big"
-	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -53,10 +52,8 @@ const (
 	// The number is referenced from the size of tx pool.
 	txChanSize = 4096
 
-	numBroadcastTxPeers = 5 // Maximum number of peers for broadcast transactions
-
-	defaultTxsCacheSize      = 20
-	defaultBroadcastInterval = 100 * time.Millisecond
+//	defaultTxsCacheSize      = 20
+//	defaultBroadcastInterval = 100 * time.Millisecond
 )
 
 // errIncompatibleConfig is returned if the requested protocols and configs are
@@ -176,7 +173,8 @@ func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, ne
 		return engine.VerifyHeader(blockchain, header, true)
 	}
 	heighter := func() uint64 {
-		return blockchain.CurrentBlock().NumberU64()
+		//return blockchain.CurrentBlock().NumberU64()
+		return engine.CurrentBlock().NumberU64() + 1
 	}
 	inserter := func(blocks types.Blocks) (int, error) {
 		// If fast sync is running, deny importing weird blocks
@@ -188,7 +186,7 @@ func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, ne
 		return manager.blockchain.InsertChain(blocks)
 	}
 	getBlockByHash := func(hash common.Hash) *types.Block {
-		return manager.blockchain.GetBlockByHash(hash)
+		return engine.GetBlockByHash(hash)
 	}
 
 	//manager.fetcher = fetcher.New(GetBlockByHash, validator, manager.BroadcastBlock, heighter, inserter, manager.removePeer)
@@ -341,10 +339,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			return errResp(ErrDecode, "%v: %v", msg, err)
 		}
 		hashMode := query.Origin.Hash != (common.Hash{})
-		p.Log().Debug("[GetBlockHeadersMsg]Received a broadcast message", "origin.Number", query.Origin.Number,
-			"origin.Hash", query.Origin.Hash, "skip", query.Skip, "amount", query.Amount,
-			"reverse", query.Reverse, "number", pm.blockchain.CurrentBlock().Number(),
-			"hash", pm.blockchain.CurrentBlock().Hash())
+		log.Debug("[GetBlockHeadersMsg]Received a broadcast message", "val", query)
 		first := true
 		maxNonCanonical := uint64(100)
 
@@ -423,7 +418,6 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				query.Origin.Number += query.Skip + 1
 			}
 		}
-		p.Log().Debug("Send headers", "headers", len(headers))
 		return p.SendBlockHeaders(headers)
 	case p.version >= eth63 && msg.Code == GetOriginAndPivotMsg:
 		p.Log().Info("[GetOriginAndPivotMsg]Received a broadcast message")
@@ -537,21 +531,18 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			p.Log().Error("Failed to deliver ppos storage data", "err", err)
 		}
 	case msg.Code == BlockHeadersMsg:
-		p.Log().Debug("Receive BlockHeadersMsg")
 		// A batch of headers arrived to one of our previous requests
 		var headers []*types.Header
 		if err := msg.Decode(&headers); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
 
-		p.Log().Debug("Receive BlockHeadersMsg, before filter", "headers", len(headers))
 		// Filter out any explicitly requested headers, deliver the rest to the downloader
 		filter := len(headers) == 1
 		if filter {
 			// Irrelevant of the fork checks, send the header to the fetcher just in case
 			headers = pm.fetcher.FilterHeaders(p.id, headers, time.Now())
 		}
-		p.Log().Debug("Receive BlockHeadersMsg, after filter", "headers", len(headers))
 		if len(headers) > 0 || !filter {
 			err := pm.downloader.DeliverHeaders(p.id, headers)
 			if err != nil {
@@ -560,7 +551,6 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 
 	case msg.Code == GetBlockBodiesMsg:
-		p.Log().Debug("Receive GetBlockBodiesMsg", "number", pm.blockchain.CurrentBlock().Number(), "hash", pm.blockchain.CurrentBlock().Hash())
 		// Decode the retrieval message
 		msgStream := rlp.NewStream(msg.Payload, uint64(msg.Size))
 		if _, err := msgStream.List(); err != nil {
@@ -861,17 +851,8 @@ func (pm *ProtocolManager) BroadcastTxs(txs types.Transactions) {
 	// Broadcast transactions to a batch of peers not knowing about it
 	for _, tx := range txs {
 		peers := pm.peers.PeersWithoutTx(tx.Hash())
-		if len(peers) <= numBroadcastTxPeers {
-			for _, peer := range peers {
-				txset[peer] = append(txset[peer], tx)
-			}
-		} else {
-			rand.Seed(time.Now().UnixNano())
-			indexes := rand.Perm(len(peers))
-			for i := 0; i < numBroadcastTxPeers; i++ {
-				peer := peers[indexes[i]]
-				txset[peer] = append(txset[peer], tx)
-			}
+		for _, peer := range peers {
+			txset[peer] = append(txset[peer], tx)
 		}
 		log.Trace("Broadcast transaction", "hash", tx.Hash(), "recipients", len(peers))
 	}
@@ -895,17 +876,35 @@ func (pm *ProtocolManager) minedBroadcastLoop() {
 }
 
 func (pm *ProtocolManager) txBroadcastLoop() {
-	timer := time.NewTimer(defaultBroadcastInterval)
+	DefaultTxsCacheSize := 20
+	DefaultBroadcastInterval := 100 * time.Millisecond
+	if pm.blockchain != nil {
+		if 0 >= pm.blockchain.CacheConfig().DefaultTxsCacheSize {
+			pm.blockchain.CacheConfig().DefaultTxsCacheSize = DefaultTxsCacheSize
+		} else {
+			DefaultTxsCacheSize = pm.blockchain.CacheConfig().DefaultTxsCacheSize
+		}
+	}
+
+	if pm.blockchain != nil {
+		if 0 >= pm.blockchain.CacheConfig().DefaultBroadcastInterval {
+			pm.blockchain.CacheConfig().DefaultBroadcastInterval = DefaultBroadcastInterval
+		} else {
+			DefaultBroadcastInterval = pm.blockchain.CacheConfig().DefaultBroadcastInterval
+		}
+	}
+
+	timer := time.NewTimer(DefaultBroadcastInterval)
 
 	for {
 		select {
 		case event := <-pm.txsCh:
 			pm.txsCache = append(pm.txsCache, event.Txs...)
-			if len(pm.txsCache) >= defaultTxsCacheSize {
+			if len(pm.txsCache) >= DefaultTxsCacheSize {
 				log.Trace("broadcast txs", "count", len(pm.txsCache))
 				pm.BroadcastTxs(pm.txsCache)
 				pm.txsCache = make([]*types.Transaction, 0)
-				timer.Reset(defaultBroadcastInterval)
+				timer.Reset(DefaultBroadcastInterval)
 			}
 		case <-timer.C:
 			if len(pm.txsCache) > 0 {
@@ -913,7 +912,7 @@ func (pm *ProtocolManager) txBroadcastLoop() {
 				pm.BroadcastTxs(pm.txsCache)
 				pm.txsCache = make([]*types.Transaction, 0)
 			}
-			timer.Reset(defaultBroadcastInterval)
+			timer.Reset(DefaultBroadcastInterval)
 
 			// Err() channel will be closed when unsubscribing.
 		case <-pm.txsSub.Err():
