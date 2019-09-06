@@ -73,7 +73,6 @@ func TestBls(t *testing.T) {
 	msg, _ := pb.CannibalizeBytes()
 	assert.Nil(t, cbft.validatorPool.Verify(0, 0, msg, pb.Sign()))
 }
-
 func TestAgg(t *testing.T) {
 	num := 4
 	pk, sk := GenerateKeys(num)
@@ -96,7 +95,7 @@ func TestAgg(t *testing.T) {
 					BlsPriKey: sk[i],
 				},
 			},
-			state: state.NewViewState(BaseMs, nil),
+			state: state.NewViewState(BaseMs),
 		}
 
 		cnode[i].state.SetHighestQCBlock(NewBlock(common.Hash{}, 1))
@@ -123,7 +122,6 @@ func testPrepareQC(t *testing.T, cnode []*Cbft) {
 	assert.NotNil(t, cnode[0].verifyPrepareQC(qc.BlockNumber, qc.BlockHash, qc))
 
 }
-
 func testViewChangeQC(t *testing.T, cnode []*Cbft) {
 	pbs := make(map[uint32]*protocols.ViewChange)
 
