@@ -637,7 +637,7 @@ func (w *worker) resultLoop() {
 				log.Debug("Block is packaged by local", "hash", hash, "number", number, "len(Receipts)", len(_receipts), "stateIsNil", stateIsNil)
 			} else {
 				_receipts = w.blockChainCache.ReadReceipts(sealhash)
-				_state = w.blockChainCache.ReadOnlyStateDB(sealhash)
+				_state = w.blockChainCache.ReadStateDB(sealhash)
 				stateIsNil := _state == nil
 				log.Debug("Block is packaged by other", "hash", hash, "number", number, "len(Receipts)", len(_receipts), "blockRoot", block.Root(), "stateIsNil", stateIsNil)
 			}

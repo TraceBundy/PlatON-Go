@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"github.com/PlatONnetwork/PlatON-Go/common/hexutil"
 	"github.com/PlatONnetwork/PlatON-Go/core/vm"
 	"github.com/PlatONnetwork/PlatON-Go/log"
 	"io"
@@ -372,6 +373,7 @@ func (self *stateObject) updateTrie(db Database) Trie {
 		//flush dirty value
 		if value, ok := self.dirtyValueStorage[valueKey]; ok {
 			delete(self.dirtyValueStorage, valueKey)
+			log.Debug("flush", "key", hexutil.Encode([]byte(key)), "value", hexutil.Encode(value))
 			self.originValueStorage[valueKey] = value
 			self.setError(tr.TryUpdateValue(valueKey.Bytes(), value))
 		}
