@@ -20,6 +20,7 @@ package state
 import (
 	"bytes"
 	"fmt"
+	"github.com/PlatONnetwork/PlatON-Go/common/hexutil"
 	"github.com/PlatONnetwork/PlatON-Go/crypto/sha3"
 	"math/big"
 	"sort"
@@ -85,6 +86,10 @@ type StateDB struct {
 	nextRevisionId int
 
 	lock sync.Mutex
+
+	refLock            sync.Mutex
+	clearReferenceFunc []func()
+	parent             *StateDB
 }
 
 // Create a new state from a given trie.
@@ -102,6 +107,53 @@ func New(root common.Hash, db Database) (*StateDB, error) {
 		preimages:         make(map[common.Hash][]byte),
 		journal:           newJournal(),
 	}, nil
+}
+
+func (self *StateDB) NewStateDB() *StateDB {
+	stateDB := &StateDB{
+		db:                self.db,
+		trie:              self.db.CopyTrie(self.trie),
+		stateObjects:      make(map[common.Address]*stateObject),
+		stateObjectsDirty: make(map[common.Address]struct{}),
+		logs:              make(map[common.Hash][]*types.Log),
+		preimages:         make(map[common.Hash][]byte),
+		journal:           newJournal(),
+		parent:            self,
+	}
+	self.AddReferenceFunc(func() {
+		stateDB.refLock.Lock()
+		if stateDB.parent != nil {
+			stateDB.parent = nil
+		}
+		stateDB.refLock.Unlock()
+	})
+	if stateDB.parent != nil {
+		stateDB.parent.dumpStorage()
+	}
+	return stateDB
+}
+func (self *StateDB) HadParent() bool {
+	return self.parent != nil
+}
+
+func (self *StateDB) dumpStorage() {
+
+	for addr, obj := range self.stateObjects {
+		log.Debug("dump storage", "addr", addr.String())
+		for k, v := range obj.originStorage {
+			vk, ok := obj.originValueStorage[v]
+			if ok {
+				log.Debug(fmt.Sprintf("origin: key:%s, valueKey:%s, value:%s", hexutil.Encode([]byte(k)), v.String(), hexutil.Encode([]byte(vk))))
+			}
+		}
+
+		for k, v := range obj.dirtyStorage {
+			vk, ok := obj.dirtyValueStorage[v]
+			if ok {
+				log.Debug("dirty: key:%s, valueKey:%s, value:%s", hexutil.Encode([]byte(k)), v.String(), hexutil.Encode([]byte(vk)))
+			}
+		}
+	}
 }
 
 // setError remembers the first non-nil error it is called with.
@@ -414,13 +466,90 @@ func (self *StateDB) deleteStateObject(stateObject *stateObject) {
 	self.setError(self.trie.TryDelete(addr[:]))
 }
 
-// Retrieve a state object given by the address. Returns nil if not found.
-func (self *StateDB) getStateObject(addr common.Address) (stateObject *stateObject) {
+func (self *StateDB) getStateObjectCache(addr common.Address) (stateObject *stateObject) {
 	// Prefer 'live' objects.
 	if obj := self.stateObjects[addr]; obj != nil {
 		if obj.deleted {
 			return nil
 		}
+		return obj
+	}
+	self.refLock.Lock()
+	db := self.parent
+	dbLock := &self.refLock
+
+	for db != nil {
+		obj := db.getStateObjectCache2(addr)
+		if obj == nil {
+			dbLock.Unlock()
+			db.refLock.Lock()
+			dbLock = &db.refLock
+			if db.parent == nil {
+				break
+			}
+			db = db.parent
+		} else {
+			dbLock.Unlock()
+			return obj.deepCopy(self)
+		}
+	}
+
+	dbLock.Unlock()
+	return nil
+}
+
+func (self *StateDB) getStateObjectCache2(addr common.Address) (stateObject *stateObject) {
+	if obj := self.stateObjects[addr]; obj != nil {
+		if obj.deleted {
+			return nil
+		}
+		return obj
+	}
+	return nil
+}
+
+func (self *StateDB) getStateObjectSnapshot(addr common.Address, key string) (common.Hash, []byte) {
+	if obj := self.stateObjects[addr]; obj != nil {
+		if obj.deleted {
+			return common.Hash{}, nil
+		}
+		valueKey, dirty := obj.dirtyStorage[key]
+		if dirty {
+			value, ok := obj.dirtyValueStorage[valueKey]
+			if ok {
+				return valueKey, value
+			}
+		}
+
+		valueKey, cached := obj.originStorage[key]
+		if cached {
+			value, cached2 := obj.originValueStorage[valueKey]
+			if cached2 {
+				return valueKey, value
+			}
+		}
+
+	}
+	return common.Hash{}, nil
+}
+
+func (self *StateDB) AddReferenceFunc(fn func()) {
+	self.refLock.Lock()
+	defer self.refLock.Unlock()
+	self.clearReferenceFunc = append(self.clearReferenceFunc, fn)
+}
+
+func (self *StateDB) ClearReference() {
+	self.refLock.Lock()
+	defer self.refLock.Unlock()
+	for _, fn := range self.clearReferenceFunc {
+		fn()
+	}
+}
+
+// Retrieve a state object given by the address. Returns nil if not found.
+func (self *StateDB) getStateObject(addr common.Address) (stateObject *stateObject) {
+	if obj := self.getStateObjectCache(addr); obj != nil {
 		return obj
 	}
 	// Load the object from the database.
@@ -558,6 +687,10 @@ func (self *StateDB) Copy() *StateDB {
 	for hash, preimage := range self.preimages {
 		state.preimages[hash] = preimage
 	}
+	self.refLock.Lock()
+	state.parent = self.parent
+	self.refLock.Unlock()
+
 	return state
 }
 

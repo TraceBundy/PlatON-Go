@@ -242,17 +242,49 @@ func (self *stateObject) GetState(db Database, keyTree string) []byte {
 //	self.originStorage[key] = value
 //	return value
 //}
-
-// GetCommittedState retrieves a value from the committed account storage trie.
-func (self *stateObject) GetCommittedState(db Database, key string) []byte {
-	value := make([]byte, 0)
-	// If we have the original value cached, return that
+func (self *stateObject) getCommittedStateCache(key string) []byte {
 	valueKey, cached := self.originStorage[key]
 	if cached {
 		value, cached2 := self.originValueStorage[valueKey]
 		if cached2 {
 			return value
 		}
+	}
+
+	self.db.refLock.Lock()
+	db := self.db.parent
+	dbLock := &self.db.refLock
+
+	for db != nil {
+		valueKey, value := db.getStateObjectSnapshot(self.address, key)
+		if value != nil {
+			//cpy := make([]byte, len(value))
+			//copy(cpy, value)
+			self.originStorage[key] = valueKey
+			self.originValueStorage[valueKey] = value
+			dbLock.Unlock()
+			return value
+		}
+		dbLock.Unlock()
+		db.refLock.Lock()
+		dbLock = &db.refLock
+		if db.parent == nil {
+			break
+		}
+		db = db.parent
+	}
+	dbLock.Unlock()
+
+	return nil
+}
+
+// GetCommittedState retrieves a value from the committed account storage trie.
+func (self *stateObject) GetCommittedState(db Database, key string) []byte {
+	value := make([]byte, 0)
+	valueKey := common.Hash{}
+	// If we have the original value cached, return that
+	if value := self.getCommittedStateCache(key); value != nil {
+		return value
 	}
 
 	// Otherwise load the valueKey from trie

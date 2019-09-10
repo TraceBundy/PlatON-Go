@@ -637,7 +637,7 @@ func (w *worker) resultLoop() {
 				log.Debug("Block is packaged by local", "hash", hash, "number", number, "len(Receipts)", len(_receipts), "stateIsNil", stateIsNil)
 			} else {
 				_receipts = w.blockChainCache.ReadReceipts(sealhash)
-				_state = w.blockChainCache.ReadStateDB(sealhash)
+				_state = w.blockChainCache.ReadOnlyStateDB(sealhash)
 				stateIsNil := _state == nil
 				log.Debug("Block is packaged by other", "hash", hash, "number", number, "len(Receipts)", len(_receipts), "blockRoot", block.Root(), "stateIsNil", stateIsNil)
 			}
@@ -680,7 +680,7 @@ func (w *worker) resultLoop() {
 			}
 			//cbftResult.SyncState <- err
 			log.Info("Successfully write new block", "hash", block.Hash(), "number", block.NumberU64(), "coinbase", block.Coinbase(), "time", block.Time())
-
+			_state.ClearReference()
 			// Broadcast the block and announce chain insertion event
 			w.mux.Post(core.NewMinedBlockEvent{Block: block})
 
@@ -1063,7 +1063,6 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, 
 		log.Error("Failed to create mining context", "err", err)
 		return
 	}
-
 	//make header extra after w.current and it's state initialized
 	extraData := w.makeExtraData()
 	copy(header.Extra[:len(extraData)], extraData)
@@ -1183,7 +1182,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, 
 		log.Error("Failed to commitNewWork on worker: call commit is failed", "blockNumber", header.Number, "err", err)
 	}
 
-	log.Info("Commit new work", "nubmer", commitBlock.Number(), "hash", commitBlock.Hash(), "pending", txsCount, "txs", w.current.tcount,"diff", txsCount - w.current.tcount, "duration", time.Since(tstart))
+	log.Info("Commit new work", "nubmer", commitBlock.Number(), "hash", commitBlock.Hash(), "pending", txsCount, "txs", w.current.tcount, "diff", txsCount-w.current.tcount, "duration", time.Since(tstart))
 }
 
 // commit runs any post-transaction state modifications, assembles the final block
@@ -1210,9 +1209,7 @@ func (w *worker) commit(interval func(), update bool, start time.Time) error {
 	root := w.current.state.IntermediateRoot(true)
 	log.Debug("Before EndBlock StateDB root, On Worker", "blockNumber",
 		w.current.header.Number.Uint64(), "root", root.Hex(), "pointer", fmt.Sprintf("%p", w.current.state))*/
-
 	s := w.current.state.Copy()
-
 	/*// todo test
 	root = s.IntermediateRoot(true)
 	log.Debug("Before EndBlock StateDB root, After copy On Worker", "blockNumber",
@@ -1333,7 +1330,6 @@ func (w *worker) shouldCommit(timestamp time.Time) (bool, *types.Block) {
 
 // make default extra data when preparing new block
 func (w *worker) makeExtraData() []byte {
-
 	// create default extradata
 	extra, _ := rlp.EncodeToBytes([]interface{}{
 		//uint(params.VersionMajor<<16 | params.VersionMinor<<8 | params.VersionPatch),
@@ -1342,7 +1338,6 @@ func (w *worker) makeExtraData() []byte {
 		runtime.Version(),
 		runtime.GOOS,
 	})
-
 	if uint64(len(extra)) > params.MaximumExtraDataSize {
 		log.Warn("Miner extra data exceed limit", "extra", hexutil.Bytes(extra), "limit", params.MaximumExtraDataSize)
 		extra = nil

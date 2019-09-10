@@ -118,6 +118,16 @@ func (pbc *BlockChainCache) ReadStateDB(sealHash common.Hash) *state.StateDB {
 	return nil
 }
 
+func (pbc *BlockChainCache) ReadOnlyStateDB(sealHash common.Hash) *state.StateDB {
+	pbc.stateDBMu.RLock()
+	defer pbc.stateDBMu.RUnlock()
+	if obj, exist := pbc.stateDBCache[sealHash]; exist {
+		log.Debug("Read the StateDB instance from the cache map", "sealHash", sealHash)
+		return obj.stateDB
+	}
+	return nil
+}
+
 // Write Receipt to the cache
 func (pbc *BlockChainCache) WriteReceipts(sealHash common.Hash, receipts []*types.Receipt, blockNum uint64) {
 	pbc.receiptsMu.Lock()
@@ -182,18 +192,21 @@ func (bcc *BlockChainCache) clearStateDB(sealHash common.Hash) {
 // Get the StateDB instance of the corresponding block
 func (bcc *BlockChainCache) MakeStateDB(block *types.Block) (*state.StateDB, error) {
 	log.Info("make stateDB", "hash", block.Hash(), "number", block.NumberU64(), "root", block.Root())
-	// Create a StateDB instance from the blockchain based on stateRoot
-	if state, err := bcc.StateAt(block.Root()); err == nil && state != nil {
-		return state, nil
-	}
+
 	// Read and copy the stateDB instance in the cache
 	sealHash := block.Header().SealHash()
-	if state := bcc.ReadStateDB(sealHash); state != nil {
+	if state := bcc.ReadOnlyStateDB(sealHash); state != nil {
 		//return state.Copy(), nil
+		statedb := state.NewStateDB()
+		if block.NumberU64() > 1 && !statedb.HadParent() {
+			panic(fmt.Sprintf("parent is nil:%d", block.NumberU64()))
+		}
+		return statedb, nil
+	} else if state, err := bcc.StateAt(block.Root()); err == nil && state != nil {
+		// Create a StateDB instance from the blockchain based on stateRoot
 		return state, nil
-	} else {
-		return nil, errMakeStateDB
 	}
+	return nil, errMakeStateDB
 }
 
 // Get the StateDB instance of the corresponding block
