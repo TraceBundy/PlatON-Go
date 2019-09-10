@@ -138,6 +138,7 @@ func (self *StateDB) HadParent() bool {
 }
 
 func (self *StateDB) DumpStorage(check bool) {
+	return
 	log.Debug("statedb stateobjects", "len", len(self.stateObjects), "root", self.Root())
 	disk, err := New(self.Root(), self.db)
 	if check && err != nil {
