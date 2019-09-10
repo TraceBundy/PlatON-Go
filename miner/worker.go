@@ -708,6 +708,9 @@ func (w *worker) resultLoop() {
 
 // makeCurrent creates a new environment for the current cycle.
 func (w *worker) makeCurrent(parent *types.Block, header *types.Header) error {
+	ss, _ := w.chain.State()
+	xx := ss.GetCommittedState(common.BytesToAddress(hexutil.MustDecode("0x1000000000000000000000000000000000000001")), hexutil.MustDecode("0x307831303030303030303030303030303030303030303030303030303030303030303030303030303031526573747269637445706f63686c6174657374"))
+	log.Debug("xx", "parent", parent.Root().String(), "xx", hexutil.Encode(xx), "root", ss.Root().String())
 	var (
 		state *state.StateDB
 		err   error
