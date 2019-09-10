@@ -94,6 +94,7 @@ type StateDB struct {
 
 // Create a new state from a given trie.
 func New(root common.Hash, db Database) (*StateDB, error) {
+	log.Debug("new root", "hash", root.String())
 	tr, err := db.OpenTrie(root)
 	if err != nil {
 		return nil, err
@@ -128,7 +129,7 @@ func (self *StateDB) NewStateDB() *StateDB {
 		stateDB.refLock.Unlock()
 	})
 	if stateDB.parent != nil {
-		stateDB.parent.dumpStorage()
+		stateDB.parent.DumpStorage(false)
 	}
 	return stateDB
 }
@@ -136,21 +137,41 @@ func (self *StateDB) HadParent() bool {
 	return self.parent != nil
 }
 
-func (self *StateDB) dumpStorage() {
-
+func (self *StateDB) DumpStorage(check bool) {
+	log.Debug("statedb stateobjects", "len", len(self.stateObjects), "root", self.Root())
+	disk, err := New(self.Root(), self.db)
+	if check && err != nil {
+		panic(fmt.Sprintf("new statdb error, root:%s, error:%s", self.Root().String(), err.Error()))
+	}
 	for addr, obj := range self.stateObjects {
 		log.Debug("dump storage", "addr", addr.String())
 		for k, v := range obj.originStorage {
-			vk, ok := obj.originValueStorage[v]
-			if ok {
-				log.Debug(fmt.Sprintf("origin: key:%s, valueKey:%s, value:%s", hexutil.Encode([]byte(k)), v.String(), hexutil.Encode([]byte(vk))))
+			if _, ok := obj.dirtyStorage[k]; !ok {
+				vk, ok := obj.originValueStorage[v]
+				if ok {
+					log.Debug(fmt.Sprintf("origin: key:%s, valueKey:%s, value:[%s] len:%d", hexutil.Encode([]byte(k)), v.String(), hexutil.Encode(vk), len(vk)))
+					if check {
+						vg := disk.GetCommittedState(addr, []byte(k))
+
+						if check && !bytes.Equal(vk, vg) {
+							panic(fmt.Sprintf("not equal, key:%s, value:[%s] len:%d", hexutil.Encode([]byte(k)), hexutil.Encode(vg), len(vg)))
+						}
+					}
+				}
 			}
 		}
 
 		for k, v := range obj.dirtyStorage {
 			vk, ok := obj.dirtyValueStorage[v]
 			if ok {
-				log.Debug("dirty: key:%s, valueKey:%s, value:%s", hexutil.Encode([]byte(k)), v.String(), hexutil.Encode([]byte(vk)))
+				log.Debug("dirty: key:%s, valueKey:%s, value:%s len:%d", hexutil.Encode([]byte(k)), v.String(), hexutil.Encode([]byte(vk)), len(vk))
+				if check {
+					vg := disk.GetCommittedState(addr, []byte(k))
+
+					if check && !bytes.Equal(vk, vg) {
+						panic(fmt.Sprintf("not equal, key:%s, value:%s len:%d", hexutil.Encode([]byte(k)), hexutil.Encode([]byte(vg)), len(vg)))
+					}
+				}
 			}
 		}
 	}
@@ -523,8 +544,8 @@ func (self *StateDB) getStateObjectSnapshot(addr common.Address, key string) (co
 
 		valueKey, cached := obj.originStorage[key]
 		if cached {
-			value, cached2 := obj.originValueStorage[valueKey]
-			if cached2 {
+			value, ok := obj.originValueStorage[valueKey]
+			if ok {
 				return valueKey, value
 			}
 		}
