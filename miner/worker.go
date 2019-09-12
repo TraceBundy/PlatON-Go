@@ -684,9 +684,7 @@ func (w *worker) resultLoop() {
 			}
 			//cbftResult.SyncState <- err
 			log.Info("Successfully write new block", "hash", block.Hash(), "number", block.NumberU64(), "coinbase", block.Coinbase(), "time", block.Time())
-			_state.ClearReference()
 
-			_state.DumpStorage(true)
 			// Broadcast the block and announce chain insertion event
 			w.mux.Post(core.NewMinedBlockEvent{Block: block})
 
@@ -708,9 +706,6 @@ func (w *worker) resultLoop() {
 
 // makeCurrent creates a new environment for the current cycle.
 func (w *worker) makeCurrent(parent *types.Block, header *types.Header) error {
-	ss, _ := w.chain.State()
-	xx := ss.GetCommittedState(common.BytesToAddress(hexutil.MustDecode("0x1000000000000000000000000000000000000001")), hexutil.MustDecode("0x307831303030303030303030303030303030303030303030303030303030303030303030303030303031526573747269637445706f63686c6174657374"))
-	log.Debug("xx", "number", parent.Number(), "chain", w.chain.CurrentBlock().Number(), "parent", parent.Root().String(), "xx", hexutil.Encode(xx), "root", ss.Root().String())
 	var (
 		state *state.StateDB
 		err   error
@@ -1275,7 +1270,7 @@ func (w *worker) makePending() (*types.Block, *state.StateDB) {
 	if parentChain.NumberU64() >= parent.NumberU64() {
 		parent = parentChain
 	}
-	log.Debug("parent in makePending", "number", parent.NumberU64(), "hash", parent.Hash())
+	log.Debug("Parent in makePending", "number", parent.NumberU64(), "hash", parent.Hash())
 
 	if parent != nil {
 		state, err := w.blockChainCache.MakeStateDB(parent)

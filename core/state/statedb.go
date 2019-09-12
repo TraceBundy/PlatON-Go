@@ -88,13 +88,13 @@ type StateDB struct {
 	lock sync.Mutex
 
 	refLock            sync.Mutex
-	clearReferenceFunc []func()
+	parentCommitted    bool
+	clearReferenceFunc []func(common.Hash)
 	parent             *StateDB
 }
 
 // Create a new state from a given trie.
 func New(root common.Hash, db Database) (*StateDB, error) {
-	log.Debug("new root", "hash", root.String())
 	tr, err := db.OpenTrie(root)
 	if err != nil {
 		return nil, err
@@ -121,23 +121,20 @@ func (self *StateDB) NewStateDB() *StateDB {
 		journal:           newJournal(),
 		parent:            self,
 	}
-	self.AddReferenceFunc(func() {
-		stateDB.refLock.Lock()
-		if stateDB.parent != nil {
-			stateDB.parent = nil
-		}
-		stateDB.refLock.Unlock()
-	})
-	if stateDB.parent != nil {
-		stateDB.parent.DumpStorage(false)
-	}
+	self.AddReferenceFunc(stateDB.clearParentRef)
+	//if stateDB.parent != nil {
+	//	stateDB.parent.DumpStorage(false)
+	//}
 	return stateDB
 }
 func (self *StateDB) HadParent() bool {
+	self.refLock.Lock()
+	defer self.refLock.Unlock()
 	return self.parent != nil
 }
 
 func (self *StateDB) DumpStorage(check bool) {
+	return
 	log.Debug("statedb stateobjects", "len", len(self.stateObjects), "root", self.Root())
 	disk, err := New(self.Root(), self.db)
 	if check && err != nil {
@@ -331,7 +328,8 @@ func (self *StateDB) GetState(addr common.Address, key []byte) []byte {
 	stateObject := self.getStateObject(addr)
 	keyTrie, _, _ := getKeyValue(addr, key, nil)
 	if stateObject != nil {
-		return stateObject.GetState(self.db, keyTrie)
+		v := stateObject.GetState(self.db, keyTrie)
+		return v
 	}
 	return []byte{}
 }
@@ -340,11 +338,7 @@ func (self *StateDB) GetState(addr common.Address, key []byte) []byte {
 func (self *StateDB) GetCommittedState(addr common.Address, key []byte) []byte {
 	stateObject := self.getStateObject(addr)
 	if stateObject != nil {
-		var buffer bytes.Buffer
-		buffer.WriteString(addr.String())
-		buffer.WriteString(string(key))
-		key := buffer.String()
-		value := stateObject.GetCommittedState(self.db, key)
+		value := stateObject.GetCommittedState(self.db, string(key))
 		return value
 	}
 	return []byte{}
@@ -427,13 +421,13 @@ func (self *StateDB) SetState(address common.Address, key, value []byte) {
 
 func getKeyValue(address common.Address, key []byte, value []byte) (string, common.Hash, []byte) {
 	var buffer bytes.Buffer
-	buffer.WriteString(address.String())
-	buffer.WriteString(string(key))
+	buffer.Write(address[:])
+	buffer.Write(key)
 	keyTrie := buffer.String()
 
 	//if value != nil && !bytes.Equal(value,[]byte{}){
 	buffer.Reset()
-	buffer.WriteString(string(value))
+	buffer.Write(value)
 
 	valueKey := common.Hash{}
 	keccak := sha3.NewKeccak256()
@@ -490,17 +484,31 @@ func (self *StateDB) deleteStateObject(stateObject *stateObject) {
 func (self *StateDB) getStateObjectCache(addr common.Address) (stateObject *stateObject) {
 	// Prefer 'live' objects.
 	if obj := self.stateObjects[addr]; obj != nil {
-		if obj.deleted {
-			return nil
-		}
 		return obj
 	}
 	self.refLock.Lock()
 	db := self.parent
+	committed := self.parentCommitted
 	dbLock := &self.refLock
 
 	for db != nil {
-		obj := db.getStateObjectCache2(addr)
+		obj := db.getStateObjectLocalCache(addr)
+		if obj != nil {
+			dbLock.Unlock()
+			cpy := obj.deepCopy(self)
+			self.setStateObject(cpy)
+			return cpy
+		} else if committed {
+			dbLock.Unlock()
+			obj := db.getStateObject(addr)
+			if obj != nil {
+				cpy := obj.deepCopy(self)
+				self.setStateObject(cpy)
+				return cpy
+			}
+			return nil
+		}
+
 		if obj == nil {
 			dbLock.Unlock()
 			db.refLock.Lock()
@@ -509,9 +517,7 @@ func (self *StateDB) getStateObjectCache(addr common.Address) (stateObject *stat
 				break
 			}
 			db = db.parent
-		} else {
-			dbLock.Unlock()
-			return obj.deepCopy(self)
+			committed = db.parentCommitted
 		}
 	}
 
@@ -519,7 +525,7 @@ func (self *StateDB) getStateObjectCache(addr common.Address) (stateObject *stat
 	return nil
 }
 
-func (self *StateDB) getStateObjectCache2(addr common.Address) (stateObject *stateObject) {
+func (self *StateDB) getStateObjectLocalCache(addr common.Address) (stateObject *stateObject) {
 	if obj := self.stateObjects[addr]; obj != nil {
 		if obj.deleted {
 			return nil
@@ -554,7 +560,7 @@ func (self *StateDB) getStateObjectSnapshot(addr common.Address, key string) (co
 	return common.Hash{}, nil
 }
 
-func (self *StateDB) AddReferenceFunc(fn func()) {
+func (self *StateDB) AddReferenceFunc(fn func(common.Hash)) {
 	self.refLock.Lock()
 	defer self.refLock.Unlock()
 	self.clearReferenceFunc = append(self.clearReferenceFunc, fn)
@@ -564,13 +570,16 @@ func (self *StateDB) ClearReference() {
 	self.refLock.Lock()
 	defer self.refLock.Unlock()
 	for _, fn := range self.clearReferenceFunc {
-		fn()
+		fn(self.Root())
 	}
 }
 
 // Retrieve a state object given by the address. Returns nil if not found.
 func (self *StateDB) getStateObject(addr common.Address) (stateObject *stateObject) {
 	if obj := self.getStateObjectCache(addr); obj != nil {
+		if obj.deleted {
+			return nil
+		}
 		return obj
 	}
 	// Load the object from the database.
@@ -709,10 +718,32 @@ func (self *StateDB) Copy() *StateDB {
 		state.preimages[hash] = preimage
 	}
 	self.refLock.Lock()
-	state.parent = self.parent
+	if self.parent != nil {
+		if !self.parentCommitted {
+			state.parent = self.parent
+			state.parent.AddReferenceFunc(state.clearParentRef)
+		} else {
+			state.parent = self.parent.Copy()
+		}
+	}
+	state.parentCommitted = self.parentCommitted
 	self.refLock.Unlock()
 
 	return state
+}
+
+func (self *StateDB) clearParentRef(root common.Hash) {
+	self.refLock.Lock()
+	defer self.refLock.Unlock()
+
+	if self.parent != nil {
+		self.parentCommitted = true
+		if parent, err := New(root, self.db); err == nil {
+			self.parent = parent
+		} else {
+			panic(fmt.Sprintf("new parent statedb error:%v", err))
+		}
+	}
 }
 
 // Snapshot returns an identifier for the current revision of the state.

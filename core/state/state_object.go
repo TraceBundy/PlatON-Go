@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
-	"github.com/PlatONnetwork/PlatON-Go/common/hexutil"
 	"github.com/PlatONnetwork/PlatON-Go/core/vm"
 	"github.com/PlatONnetwork/PlatON-Go/log"
 	"io"
@@ -254,17 +253,19 @@ func (self *stateObject) getCommittedStateCache(key string) []byte {
 
 	self.db.refLock.Lock()
 	db := self.db.parent
+	committed := self.db.parentCommitted
 	dbLock := &self.db.refLock
 
 	for db != nil {
 		valueKey, value := db.getStateObjectSnapshot(self.address, key)
 		if value != nil {
-			//cpy := make([]byte, len(value))
-			//copy(cpy, value)
 			self.originStorage[key] = valueKey
 			self.originValueStorage[valueKey] = value
 			dbLock.Unlock()
 			return value
+		} else if committed {
+			dbLock.Unlock()
+			return db.GetCommittedState(self.address, []byte(key))
 		}
 		dbLock.Unlock()
 		db.refLock.Lock()
@@ -273,6 +274,7 @@ func (self *stateObject) getCommittedStateCache(key string) []byte {
 			break
 		}
 		db = db.parent
+		committed = db.parentCommitted
 	}
 	dbLock.Unlock()
 
@@ -281,10 +283,12 @@ func (self *stateObject) getCommittedStateCache(key string) []byte {
 
 // GetCommittedState retrieves a value from the committed account storage trie.
 func (self *stateObject) GetCommittedState(db Database, key string) []byte {
+
 	value := make([]byte, 0)
 	valueKey := common.Hash{}
 	// If we have the original value cached, return that
 	if value := self.getCommittedStateCache(key); value != nil {
+		log.Info("GetCommittedState cache", "key", hex.EncodeToString([]byte(key)), "value", len(value))
 		return value
 	}
 
@@ -315,7 +319,7 @@ func (self *stateObject) GetCommittedState(db Database, key string) []byte {
 	if len(value) == 0 && valueKey == emptyStorage {
 		log.Debug("empty storage valuekey", "key", hex.EncodeToString([]byte(key)), "valueKey", valueKey.String())
 	}
-	log.Info("GetCommittedState", "stateObject addr", fmt.Sprintf("%p", self), "root", self.data.Root, "key", hex.EncodeToString([]byte(key)), "valueKey", valueKey.String(), "value", len(value))
+	log.Info("GetCommittedState", "key", hex.EncodeToString([]byte(key)), "valueKey", valueKey.String(), "value", len(value))
 	self.originStorage[key] = valueKey
 	self.originValueStorage[valueKey] = value
 	return value
@@ -325,7 +329,6 @@ func (self *stateObject) GetCommittedState(db Database, key string) []byte {
 // set [keyTrie,valueKey] to storage
 // set [valueKey,value] to db
 func (self *stateObject) SetState(db Database, keyTrie string, valueKey common.Hash, value []byte) {
-	log.Debug("SetState ", "keyTrie", hex.EncodeToString([]byte(keyTrie)), "valueKey", valueKey, "value", hex.EncodeToString(value))
 	//if the new value is the same as old,don't set
 	preValue := self.GetState(db, keyTrie) // get value key
 	if bytes.Equal(preValue, value) {
@@ -373,7 +376,6 @@ func (self *stateObject) updateTrie(db Database) Trie {
 		//flush dirty value
 		if value, ok := self.dirtyValueStorage[valueKey]; ok {
 			delete(self.dirtyValueStorage, valueKey)
-			log.Debug("flush", "key", hexutil.Encode([]byte(key)), "value", hexutil.Encode(value))
 			self.originValueStorage[valueKey] = value
 			self.setError(tr.TryUpdateValue(valueKey.Bytes(), value))
 		}
