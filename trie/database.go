@@ -86,7 +86,7 @@ type Database struct {
 }
 
 func (db *Database) Copy() *Database {
-	return &Database{
+	cpy := &Database{
 		diskdb:        db.diskdb,
 		nodes:         db.nodes,
 		oldest:        db.oldest,
@@ -100,6 +100,9 @@ func (db *Database) Copy() *Database {
 		nodesSize:     db.nodesSize,
 		preimagesSize: 0,
 		preimages:     make(map[common.Hash][]byte),
+	}
+	for k, v := range db.preimages {
+		cpy.preimages[k] = v
 	}
 }
 

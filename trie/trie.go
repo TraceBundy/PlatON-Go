@@ -80,7 +80,7 @@ type Trie struct {
 
 func (t *Trie) Copy() Trie {
 	trie := Trie{
-		db:           t.db,
+		db:           t.db.Copy(),
 		root:         t.root,
 		originalRoot: t.originalRoot,
 		cachegen:     t.cachegen,
