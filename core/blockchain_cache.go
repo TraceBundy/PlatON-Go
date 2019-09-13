@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -176,18 +177,19 @@ func (bcc *BlockChainCache) clearStateDB(sealHash common.Hash) {
 	bcc.stateDBMu.Lock()
 	defer bcc.stateDBMu.Unlock()
 
-	var blockNum uint64
 	if obj, exist := bcc.stateDBCache[sealHash]; exist {
-		blockNum = obj.blockNum
+		obj.stateDB.ClearReference()
+		log.Debug("Clear StateDB", "sealHash", sealHash, "number", obj.blockNum)
+		delete(bcc.stateDBCache, sealHash)
 		//delete(pbc.stateDBCache, sealHash)
 	}
-	for hash, obj := range bcc.stateDBCache {
-		if obj.blockNum < blockNum {
-			obj.stateDB.ClearReference()
-			log.Debug("Clear StateDB", "sealHash", hash, "number", obj.blockNum)
-			delete(bcc.stateDBCache, hash)
-		}
-	}
+	//for hash, obj := range bcc.stateDBCache {
+	//	if obj.blockNum < blockNum {
+	//		obj.stateDB.ClearReference()
+	//		log.Debug("Clear StateDB", "sealHash", hash, "number", obj.blockNum)
+	//		delete(bcc.stateDBCache, hash)
+	//	}
+	//}
 }
 
 // Get the StateDB instance of the corresponding block
@@ -220,17 +222,23 @@ func (bcc *BlockChainCache) ClearCache(block *types.Block) {
 	}
 	log.Debug("Clear cache", "baseBlockHash", block.Hash(), "baseBlockNumber", baseNumber)
 
+	var sh sealHashSort
 	bcc.executed.Range(func(key, value interface{}) bool {
 		number := value.(uint64)
 		if number < baseNumber-1 {
 			sealHash := key.(common.Hash)
-			bcc.clearReceipts(sealHash)
-			bcc.clearStateDB(sealHash)
-			bcc.executed.Delete(sealHash)
-			log.Debug("Clear Cache block", "sealHash", sealHash, "number", number)
+			sh = append(sh, &sealHashNumber{number: number, hash: sealHash})
+
 		}
 		return true
 	})
+	sort.Sort(sh)
+	for _, s := range sh {
+		log.Debug("Clear Cache block", "sealHash", s.hash, "number", s.number)
+		bcc.clearReceipts(s.hash)
+		bcc.clearStateDB(s.hash)
+		bcc.executed.Delete(s.hash)
+	}
 }
 
 func (bcc *BlockChainCache) StateDBString() string {
@@ -317,3 +325,16 @@ func (bcc *BlockChainCache) WriteBlock(block *types.Block) error {
 	log.Info("Successfully write new block", "hash", block.Hash(), "number", block.NumberU64())
 	return nil
 }
+
+type sealHashNumber struct {
+	number uint64
+	hash   common.Hash
+}
+
+type sealHashSort []*sealHashNumber
+
+func (self sealHashSort) Len() int { return len(self) }
+func (self sealHashSort) Swap(i, j int) {
+	self[i], self[j] = self[j], self[i]
+}
+func (self sealHashSort) Less(i, j int) bool { return self[i].number < self[j].number }

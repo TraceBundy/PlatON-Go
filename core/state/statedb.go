@@ -89,7 +89,7 @@ type StateDB struct {
 
 	refLock            sync.Mutex
 	parentCommitted    bool
-	clearReferenceFunc []func(common.Hash)
+	clearReferenceFunc []func()
 	parent             *StateDB
 }
 
@@ -100,26 +100,28 @@ func New(root common.Hash, db Database) (*StateDB, error) {
 		return nil, err
 	}
 	return &StateDB{
-		db:                db,
-		trie:              tr,
-		stateObjects:      make(map[common.Address]*stateObject),
-		stateObjectsDirty: make(map[common.Address]struct{}),
-		logs:              make(map[common.Hash][]*types.Log),
-		preimages:         make(map[common.Hash][]byte),
-		journal:           newJournal(),
+		db:                 db,
+		trie:               tr,
+		stateObjects:       make(map[common.Address]*stateObject),
+		stateObjectsDirty:  make(map[common.Address]struct{}),
+		logs:               make(map[common.Hash][]*types.Log),
+		preimages:          make(map[common.Hash][]byte),
+		journal:            newJournal(),
+		clearReferenceFunc: make([]func(), 0),
 	}, nil
 }
 
 func (self *StateDB) NewStateDB() *StateDB {
 	stateDB := &StateDB{
-		db:                self.db,
-		trie:              self.db.CopyTrie(self.trie),
-		stateObjects:      make(map[common.Address]*stateObject),
-		stateObjectsDirty: make(map[common.Address]struct{}),
-		logs:              make(map[common.Hash][]*types.Log),
-		preimages:         make(map[common.Hash][]byte),
-		journal:           newJournal(),
-		parent:            self,
+		db:                 self.db,
+		trie:               self.db.CopyTrie(self.trie),
+		stateObjects:       make(map[common.Address]*stateObject),
+		stateObjectsDirty:  make(map[common.Address]struct{}),
+		logs:               make(map[common.Hash][]*types.Log),
+		preimages:          make(map[common.Hash][]byte),
+		journal:            newJournal(),
+		parent:             self,
+		clearReferenceFunc: make([]func(), 0),
 	}
 	self.AddReferenceFunc(stateDB.clearParentRef)
 	//if stateDB.parent != nil {
@@ -560,9 +562,12 @@ func (self *StateDB) getStateObjectSnapshot(addr common.Address, key string) (co
 	return common.Hash{}, nil
 }
 
-func (self *StateDB) AddReferenceFunc(fn func(common.Hash)) {
+func (self *StateDB) AddReferenceFunc(fn func()) {
 	self.refLock.Lock()
 	defer self.refLock.Unlock()
+	if self.clearReferenceFunc == nil {
+		panic("statedb had cleared")
+	}
 	self.clearReferenceFunc = append(self.clearReferenceFunc, fn)
 }
 
@@ -570,8 +575,15 @@ func (self *StateDB) ClearReference() {
 	self.refLock.Lock()
 	defer self.refLock.Unlock()
 	for _, fn := range self.clearReferenceFunc {
-		fn(self.Root())
+		fn()
 	}
+	log.Debug("clear all ref")
+	if self.parent != nil {
+		if len(self.parent.clearReferenceFunc) > 0 {
+			panic("parent ref > 0")
+		}
+	}
+	self.clearReferenceFunc = nil
 }
 
 // Retrieve a state object given by the address. Returns nil if not found.
@@ -676,15 +688,16 @@ func (self *StateDB) Copy() *StateDB {
 
 	// Copy all the basic fields, initialize the memory ones
 	state := &StateDB{
-		db:                self.db,
-		trie:              self.db.CopyTrie(self.trie),
-		stateObjects:      make(map[common.Address]*stateObject, len(self.journal.dirties)),
-		stateObjectsDirty: make(map[common.Address]struct{}, len(self.journal.dirties)),
-		refund:            self.refund,
-		logs:              make(map[common.Hash][]*types.Log, len(self.logs)),
-		logSize:           self.logSize,
-		preimages:         make(map[common.Hash][]byte),
-		journal:           newJournal(),
+		db:                 self.db,
+		trie:               self.db.CopyTrie(self.trie),
+		stateObjects:       make(map[common.Address]*stateObject, len(self.journal.dirties)),
+		stateObjectsDirty:  make(map[common.Address]struct{}, len(self.journal.dirties)),
+		refund:             self.refund,
+		logs:               make(map[common.Hash][]*types.Log, len(self.logs)),
+		logSize:            self.logSize,
+		preimages:          make(map[common.Hash][]byte),
+		journal:            newJournal(),
+		clearReferenceFunc: make([]func(), 0),
 	}
 	// Copy the dirty states, logs, and preimages
 	for addr := range self.journal.dirties {
@@ -732,13 +745,13 @@ func (self *StateDB) Copy() *StateDB {
 	return state
 }
 
-func (self *StateDB) clearParentRef(root common.Hash) {
+func (self *StateDB) clearParentRef() {
 	self.refLock.Lock()
 	defer self.refLock.Unlock()
 
 	if self.parent != nil {
 		self.parentCommitted = true
-		if parent, err := New(root, self.db); err == nil {
+		if parent, err := New(self.Root(), self.parent.db); err == nil {
 			self.parent = parent
 		} else {
 			panic(fmt.Sprintf("new parent statedb error:%v", err))

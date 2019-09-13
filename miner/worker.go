@@ -668,10 +668,6 @@ func (w *worker) resultLoop() {
 			// Commit block and state to database.
 			block.SetExtraData(cbftResult.ExtraData)
 			log.Debug("Write extra data", "txs", len(block.Transactions()), "extra", len(block.ExtraData()))
-			ss, _ := w.chain.State()
-			xx := ss.GetCommittedState(common.BytesToAddress(hexutil.MustDecode("0x1000000000000000000000000000000000000001")), hexutil.MustDecode("0x307831303030303030303030303030303030303030303030303030303030303030303030303030303031526573747269637445706f63686c6174657374"))
-			log.Debug("xx", "xx", hexutil.Encode(xx), "root", ss.Root().String())
-
 			// update 3-chain state
 			cbftResult.ChainStateUpdateCB()
 			stat, err := w.chain.WriteBlockWithState(block, receipts, _state)
@@ -682,6 +678,7 @@ func (w *worker) resultLoop() {
 				log.Error("Failed writing block to chain", "hash", block.Hash(), "number", block.NumberU64(), "err", err)
 				continue
 			}
+
 			//cbftResult.SyncState <- err
 			log.Info("Successfully write new block", "hash", block.Hash(), "number", block.NumberU64(), "coinbase", block.Coinbase(), "time", block.Time())
 
