@@ -346,7 +346,7 @@ func (db *Database) insertPreimage(hash common.Hash, preimage []byte) {
 	if _, ok := db.preimages[hash]; ok {
 		return
 	}
-	db.preimages[hash] = common.CopyBytes(preimage)
+	db.preimages[hash] = preimage
 	db.preimagesSize += common.StorageSize(common.HashLength + len(preimage))
 }
 
