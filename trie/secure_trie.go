@@ -115,7 +115,6 @@ func (t *SecureTrie) TryUpdate(key, value []byte) error {
 func (t *SecureTrie) TryUpdateValue(key, value []byte) error {
 	hash := common.BytesToHash(key)
 	t.storageValue[hash] = value
-	t.getSecKeyCache()[string(key)] = common.CopyBytes(value)
 	return nil
 }
 
@@ -185,9 +184,8 @@ func (t *SecureTrie) Root() []byte {
 
 // Copy returns a copy of SecureTrie.
 func (t *SecureTrie) Copy() *SecureTrie {
-	log.Debug("copy trie", "length", len(t.trie.db.preimages))
 	cpy := &SecureTrie{
-		trie:             t.trie.Copy(),
+		trie:             t.trie,
 		storageValue:     make(map[common.Hash][]byte),
 		secKeyCache:      t.secKeyCache,
 		secKeyCacheOwner: t.secKeyCacheOwner,
