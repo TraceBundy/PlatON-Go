@@ -178,7 +178,7 @@ type cachedTrie struct {
 func (m cachedTrie) Commit(onleaf trie.LeafCallback) (common.Hash, error) {
 	root, err := m.SecureTrie.Commit(onleaf)
 	if err == nil {
-		m.db.pushTrie(m.SecureTrie)
+		//m.db.pushTrie(m.SecureTrie)
 	}
 	return root, err
 }
