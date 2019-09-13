@@ -78,9 +78,9 @@ type Trie struct {
 	cachegen, cachelimit uint16
 }
 
-func (t *Trie) Copy() *Trie {
-	trie := &Trie{
-		db:           t.db.Copy(),
+func (t *Trie) Copy() Trie {
+	trie := Trie{
+		db:           t.db,
 		root:         t.root,
 		originalRoot: t.originalRoot,
 		cachegen:     t.cachegen,
