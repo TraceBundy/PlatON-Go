@@ -32,9 +32,9 @@ var (
 	emptyRoot = common.HexToHash("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
 
 	// emptyState is the known hash of an empty state trie entry.
-	emptyState    = crypto.Keccak256Hash(nil)
+	emptyState = crypto.Keccak256Hash(nil)
 	//storagePrefix = "storage-value-"
-	emptyStorage  = crypto.Keccak256Hash(nil)
+	emptyStorage = crypto.Keccak256Hash(nil)
 )
 
 var (
@@ -76,6 +76,17 @@ type Trie struct {
 	// new nodes are tagged with the current generation and unloaded
 	// when their generation is older than than cachegen-cachelimit.
 	cachegen, cachelimit uint16
+}
+
+func (t *Trie) Copy() *Trie {
+	trie := &Trie{
+		db:           t.db.Copy(),
+		root:         t.root,
+		originalRoot: t.originalRoot,
+		cachegen:     t.cachegen,
+		cachelimit:   t.cachelimit,
+	}
+	return trie
 }
 
 // SetCacheLimit sets the number of 'cache generations' to keep.

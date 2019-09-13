@@ -85,6 +85,24 @@ type Database struct {
 	lock sync.RWMutex
 }
 
+func (db *Database) Copy() *Database {
+	return &Database{
+		diskdb:        db.diskdb,
+		nodes:         db.nodes,
+		oldest:        db.oldest,
+		newest:        db.newest,
+		seckeybuf:     db.seckeybuf,
+		gctime:        db.gctime,
+		gcnodes:       db.gcnodes,
+		gcsize:        db.gcsize,
+		flushtime:     db.flushtime,
+		flushsize:     db.flushsize,
+		nodesSize:     db.nodesSize,
+		preimagesSize: 0,
+		preimages:     make(map[common.Hash][]byte),
+	}
+}
+
 // rawNode is a simple binary blob used to differentiate between collapsed trie
 // nodes and already encoded RLP binary blobs (while at the same time store them
 // in the same cache fields).
