@@ -577,7 +577,7 @@ func (self *StateDB) ClearReference() {
 	for _, fn := range self.clearReferenceFunc {
 		fn()
 	}
-	log.Debug("clear all ref")
+	log.Debug("clear all ref", "reflen", len(self.clearReferenceFunc))
 	if self.parent != nil {
 		if len(self.parent.clearReferenceFunc) > 0 {
 			panic("parent ref > 0")
