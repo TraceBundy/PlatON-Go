@@ -104,7 +104,7 @@ func (db *Database) Copy() *Database {
 	for k, v := range db.preimages {
 		cpy.preimages[k] = v
 	}
-	log.Debug("nodes caches", "len", len(db.nodes))
+	log.Debug("nodes caches", "len", len(db.nodes), "preimages", len(db.preimages))
 	return cpy
 }
 
