@@ -752,8 +752,8 @@ func (self *StateDB) clearParentRef() {
 
 	if self.parent != nil {
 		self.parentCommitted = true
-		log.Debug("new root", "hash", self.Root().String())
-		if parent, err := New(self.Root(), self.parent.db); err == nil {
+		log.Debug("new root", "hash", self.parent.Root().String())
+		if parent, err := New(self.parent.Root(), self.parent.db); err == nil {
 			self.parent = parent
 		} else {
 			panic(fmt.Sprintf("new parent statedb error:%v", err))
