@@ -104,6 +104,8 @@ func (db *Database) Copy() *Database {
 	for k, v := range db.preimages {
 		cpy.preimages[k] = v
 	}
+	log.Debug("nodes caches", "len", len(db.nodes))
+	return cpy
 }
 
 // rawNode is a simple binary blob used to differentiate between collapsed trie
