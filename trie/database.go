@@ -82,7 +82,7 @@ type Database struct {
 	nodesSize     common.StorageSize // Storage size of the nodes cache (exc. flushlist)
 	preimagesSize common.StorageSize // Storage size of the preimages cache
 
-	lock sync.RWMutex
+	lock *sync.RWMutex
 }
 
 func (db *Database) Copy() *Database {
@@ -100,6 +100,7 @@ func (db *Database) Copy() *Database {
 		nodesSize:     db.nodesSize,
 		preimagesSize: 0,
 		preimages:     make(map[common.Hash][]byte),
+		lock:          db.lock,
 	}
 	for k, v := range db.preimages {
 		cpy.preimages[k] = v
@@ -291,6 +292,7 @@ func NewDatabase(diskdb ethdb.Database) *Database {
 		diskdb:    diskdb,
 		nodes:     map[common.Hash]*cachedNode{{}: {}},
 		preimages: make(map[common.Hash][]byte),
+		lock:      &sync.RWMutex{},
 	}
 }
 
