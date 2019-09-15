@@ -731,17 +731,19 @@ func (self *StateDB) Copy() *StateDB {
 	for hash, preimage := range self.preimages {
 		state.preimages[hash] = preimage
 	}
-	//self.refLock.Lock()
-	//if self.parent != nil {
-	//	if !self.parentCommitted {
-	//		state.parent = self.parent
-	//		state.parent.AddReferenceFunc(state.clearParentRef)
-	//	} else {
-	//		state.parent = self.parent.Copy()
-	//	}
-	//}
-	//state.parentCommitted = self.parentCommitted
-	//self.refLock.Unlock()
+	self.refLock.Lock()
+	if self.parent != nil {
+		if !self.parentCommitted {
+			state.parent = self.parent
+			state.parent.AddReferenceFunc(state.clearParentRef)
+		} else {
+			if parent, err := New(self.parent.Root(), self.parent.db); err == nil {
+				state.parent = parent
+			}
+		}
+	}
+	state.parentCommitted = self.parentCommitted
+	self.refLock.Unlock()
 
 	return state
 }
