@@ -584,6 +584,7 @@ func (self *StateDB) ClearReference() {
 		}
 	}
 	self.clearReferenceFunc = nil
+	self.parent = nil
 }
 
 // Retrieve a state object given by the address. Returns nil if not found.
