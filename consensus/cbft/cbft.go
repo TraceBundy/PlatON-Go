@@ -6,7 +6,7 @@ import (
 	"crypto/elliptic"
 	"encoding/json"
 	"fmt"
-	"github.com/PlatONnetwork/PlatON-Go/life/pingcap/failpoint"
+	"github.com/pingcap/failpoint"
 	"strings"
 	"sync/atomic"
 
@@ -707,8 +707,8 @@ func (cbft *Cbft) OnSeal(block *types.Block, results chan<- *types.Block, stop <
 	}
 
 	// add failpoint
-	failpoint.Inject("mock-onViewChange-panic1", func() {
-		panic("mock-onViewChange-panic1")
+	failpoint.Inject("mock-OnSeal-panic", func() {
+		panic("mock-OnSeal-panic")
 	})
 
 	me, err := cbft.validatorPool.GetValidatorByNodeID(cbft.state.Epoch(), cbft.NodeID())

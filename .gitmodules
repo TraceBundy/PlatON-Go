@@ -15,6 +15,3 @@
 	path = crypto/bls/bls_win
 	url = https://github.com/PlatONnetwork/bls_win.git
     ignore = dirty
-[submodule "life/pingcap/failpoint"]
-	path = life/pingcap/failpoint
-	url = https://github.com/pingcap/failpoint.git
