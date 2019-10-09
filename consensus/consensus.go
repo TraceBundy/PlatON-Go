@@ -140,8 +140,6 @@ type Engine interface {
 	Resume()
 
 	DecodeExtra(extra []byte) (common.Hash, uint64, error)
-
-	NextViewBlockIndex() uint32
 }
 
 // PoW is a consensus engine based on proof-of-work.

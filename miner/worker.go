@@ -1314,15 +1314,6 @@ func (w *worker) shouldCommit(timestamp time.Time) (bool, *types.Block) {
 	log.Trace("Check should commit", "shouldCommit", shouldCommit, "status", status, "timestamp", timestamp, "nextBlockTime", nextBlockTime)
 
 	if shouldCommit && nextBaseBlock != nil {
-		// add failpoint
-		nextIndex := w.engine.NextViewBlockIndex()
-		failpoint.Inject("mock-PB03", func(value failpoint.Value) {
-			if value == int(nextIndex) {
-				log.Warn("[mock-PB03]Seal duplicate prepareBlock", "nodeId", w.engine.(consensus.Bft).NodeID(), "index", nextIndex, "baseNumber", currentBaseBlock.NumberU64(), "baseHash", currentBaseBlock.Hash())
-				failpoint.Return(shouldCommit, currentBaseBlock)
-			}
-		})
-
 		var err error
 		w.commitWorkEnv.currentBaseBlock.Store(nextBaseBlock)
 		if err != nil {

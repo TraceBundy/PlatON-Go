@@ -726,6 +726,28 @@ func (cbft *Cbft) OnSeal(block *types.Block, results chan<- *types.Block, stop <
 		ProposalIndex: uint32(me.Index),
 	}
 
+	failpoint.Inject("mock-PB03", func(value failpoint.Value) {
+		if value == int(prepareBlock.BlockIndex) {
+			cbft.log.Debug("[mock-PB03]Broadcast duplicate prepareBlock", "nodeId", cbft.NodeID(), "index", prepareBlock.BlockIndex, "blockNumber", prepareBlock.BlockNum(), "blockHash", prepareBlock.Block.Hash())
+			preIndex := prepareBlock.BlockIndex - 1
+			preBlock := cbft.state.ViewBlockByIndex(preIndex)
+
+			header := &types.Header{
+				Number:     preBlock.Number(),
+				ParentHash: preBlock.ParentHash(),
+			}
+			dupBlock := types.NewBlockWithHeader(header)
+			dupPB := &protocols.PrepareBlock{
+				Epoch:         cbft.state.Epoch(),
+				ViewNumber:    cbft.state.ViewNumber(),
+				Block:         dupBlock,
+				BlockIndex:    preIndex,
+				ProposalIndex: uint32(me.Index),
+			}
+			cbft.network.Broadcast(dupPB)
+		}
+	})
+
 	// Next index is equal zero, This view does not produce a block.
 	if cbft.state.NextViewBlockIndex() == 0 {
 		parentBlock, parentQC := cbft.blockTree.FindBlockAndQC(block.ParentHash(), block.NumberU64()-1)
@@ -741,24 +763,6 @@ func (cbft *Cbft) OnSeal(block *types.Block, results chan<- *types.Block, stop <
 		cbft.log.Error("Sign PrepareBlock failed", "err", err, "hash", block.Hash(), "number", block.NumberU64())
 		return
 	}
-
-	failpoint.Inject("mock-PB03", func(value failpoint.Value) {
-		if value == int(prepareBlock.BlockIndex) {
-			cbft.log.Debug("[mock-PB03]Broadcast duplicate prepareBlock", "nodeId", cbft.NodeID(), "index", prepareBlock.BlockIndex, "blockNumber", prepareBlock.BlockNum(), "blockHash", prepareBlock.Block.Hash())
-			cbft.network.Broadcast(prepareBlock)
-			go func() {
-				select {
-				case <-stop:
-					return
-				case results <- block:
-					blockProduceMeter.Mark(1)
-				default:
-					cbft.log.Warn("Sealing result channel is not ready by miner", "sealHash", block.Header().SealHash())
-				}
-			}()
-			return
-		}
-	})
 
 	cbft.state.SetExecuting(prepareBlock.BlockIndex, true)
 
@@ -1743,8 +1747,4 @@ func (cbft *Cbft) DecodeExtra(extra []byte) (common.Hash, uint64, error) {
 		return common.Hash{}, 0, err
 	}
 	return qc.BlockHash, qc.BlockNumber, nil
-}
-
-func (cbft *Cbft) NextViewBlockIndex() uint32 {
-	return cbft.state.NextViewBlockIndex()
 }
