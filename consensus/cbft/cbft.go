@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	mapset "github.com/deckarep/golang-set"
+	"github.com/deckarep/golang-set"
 
 	"github.com/PlatONnetwork/PlatON-Go/common/hexutil"
 
@@ -706,11 +706,6 @@ func (cbft *Cbft) OnSeal(block *types.Block, results chan<- *types.Block, stop <
 		return
 	}
 
-	// add failpoint
-	failpoint.Inject("mock-OnSeal-panic", func() {
-		panic("mock-OnSeal-panic")
-	})
-
 	me, err := cbft.validatorPool.GetValidatorByNodeID(cbft.state.Epoch(), cbft.NodeID())
 	if err != nil {
 		cbft.log.Warn("Can not got the validator, seal fail", "epoch", cbft.state.Epoch(), "nodeID", cbft.NodeID())
@@ -746,6 +741,24 @@ func (cbft *Cbft) OnSeal(block *types.Block, results chan<- *types.Block, stop <
 		cbft.log.Error("Sign PrepareBlock failed", "err", err, "hash", block.Hash(), "number", block.NumberU64())
 		return
 	}
+
+	failpoint.Inject("mock-PB03", func(value failpoint.Value) {
+		if value == int(prepareBlock.BlockIndex) {
+			cbft.log.Debug("[mock-PB03]Broadcast duplicate prepareBlock", "nodeId", cbft.NodeID(), "index", prepareBlock.BlockIndex, "blockNumber", prepareBlock.BlockNum(), "blockHash", prepareBlock.Block.Hash())
+			cbft.network.Broadcast(prepareBlock)
+			go func() {
+				select {
+				case <-stop:
+					return
+				case results <- block:
+					blockProduceMeter.Mark(1)
+				default:
+					cbft.log.Warn("Sealing result channel is not ready by miner", "sealHash", block.Header().SealHash())
+				}
+			}()
+			return
+		}
+	})
 
 	cbft.state.SetExecuting(prepareBlock.BlockIndex, true)
 
@@ -1730,4 +1743,8 @@ func (cbft *Cbft) DecodeExtra(extra []byte) (common.Hash, uint64, error) {
 		return common.Hash{}, 0, err
 	}
 	return qc.BlockHash, qc.BlockNumber, nil
+}
+
+func (cbft *Cbft) NextViewBlockIndex() uint32 {
+	return cbft.state.NextViewBlockIndex()
 }

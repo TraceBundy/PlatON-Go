@@ -124,6 +124,7 @@ type Engine interface {
 	HasBlock(hash common.Hash, number uint64) bool
 
 	Status() string
+
 	GetBlockByHash(hash common.Hash) *types.Block
 
 	CurrentBlock() *types.Block
@@ -139,6 +140,8 @@ type Engine interface {
 	Resume()
 
 	DecodeExtra(extra []byte) (common.Hash, uint64, error)
+
+	NextViewBlockIndex() uint32
 }
 
 // PoW is a consensus engine based on proof-of-work.

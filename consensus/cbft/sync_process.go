@@ -175,7 +175,6 @@ func (cbft *Cbft) prepareBlockFetchRules(id string, pb *protocols.PrepareBlock) 
 			b := cbft.state.ViewBlockByIndex(i)
 			if b == nil {
 				cbft.SyncPrepareBlock(id, cbft.state.Epoch(), cbft.state.ViewNumber(), i)
-
 			}
 		}
 	}

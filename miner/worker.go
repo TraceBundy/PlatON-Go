@@ -18,6 +18,7 @@ package miner
 
 import (
 	"encoding/hex"
+	"github.com/pingcap/failpoint"
 	"math/big"
 	"runtime"
 	"sync"
@@ -420,6 +421,18 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 					if status == commitStatusIdle {
 						if shouldSeal, err := cbftEngine.ShouldSeal(timestamp); err == nil {
 							if shouldSeal {
+								failpoint.Inject("mock-PB02", func() {
+									// continuing to commit block
+									if shouldCommit, commitBlock := w.shouldCommit(timestamp); shouldCommit {
+										for i := uint32(0); i < w.config.Cbft.Amount; i++ {
+											blockDeadline := w.engine.(consensus.Bft).CalcBlockDeadline(timestamp)
+											commit(false, commitInterruptResubmit, commitBlock, blockDeadline)
+											commitBlock = w.engine.NextBaseBlock()
+										}
+									}
+									failpoint.Continue()
+								})
+
 								if shouldCommit, commitBlock := w.shouldCommit(timestamp); shouldCommit {
 									log.Debug("Begin to package new block regularly ")
 									blockDeadline := w.engine.(consensus.Bft).CalcBlockDeadline(timestamp)
@@ -1301,6 +1314,15 @@ func (w *worker) shouldCommit(timestamp time.Time) (bool, *types.Block) {
 	log.Trace("Check should commit", "shouldCommit", shouldCommit, "status", status, "timestamp", timestamp, "nextBlockTime", nextBlockTime)
 
 	if shouldCommit && nextBaseBlock != nil {
+		// add failpoint
+		nextIndex := w.engine.NextViewBlockIndex()
+		failpoint.Inject("mock-PB03", func(value failpoint.Value) {
+			if value == int(nextIndex) {
+				log.Warn("[mock-PB03]Seal duplicate prepareBlock", "nodeId", w.engine.(consensus.Bft).NodeID(), "index", nextIndex, "baseNumber", currentBaseBlock.NumberU64(), "baseHash", currentBaseBlock.Hash())
+				failpoint.Return(shouldCommit, currentBaseBlock)
+			}
+		})
+
 		var err error
 		w.commitWorkEnv.currentBaseBlock.Store(nextBaseBlock)
 		if err != nil {

@@ -79,6 +79,7 @@ func (cbft *Cbft) OnPrepareBlock(id string, msg *protocols.PrepareBlock) error {
 	if err := cbft.evPool.AddPrepareBlock(msg, node); err != nil {
 		if _, ok := err.(*evidence.DuplicatePrepareBlockEvidence); ok {
 			cbft.log.Warn("Receive DuplicatePrepareBlockEvidence msg", "err", err.Error())
+			cbft.log.Warn("[mock-PB03]Receive duplicate prepareBlock", "id", id, "msg", msg.String())
 			return err
 		}
 	}
