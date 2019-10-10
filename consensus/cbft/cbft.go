@@ -728,7 +728,6 @@ func (cbft *Cbft) OnSeal(block *types.Block, results chan<- *types.Block, stop <
 
 	failpoint.Inject("mock-PB03", func(value failpoint.Value) {
 		if value == int(prepareBlock.BlockIndex) {
-			cbft.log.Debug("[mock-PB03]Broadcast duplicate prepareBlock", "nodeId", cbft.NodeID(), "index", prepareBlock.BlockIndex, "blockNumber", prepareBlock.BlockNum(), "blockHash", prepareBlock.Block.Hash())
 			preIndex := prepareBlock.BlockIndex - 1
 			preBlock := cbft.state.ViewBlockByIndex(preIndex)
 
@@ -744,6 +743,8 @@ func (cbft *Cbft) OnSeal(block *types.Block, results chan<- *types.Block, stop <
 				BlockIndex:    preIndex,
 				ProposalIndex: uint32(me.Index),
 			}
+			cbft.signMsgByBls(dupPB)
+			cbft.log.Warn("[mock-PB03]Broadcast duplicate prepareBlock", "nodeId", cbft.NodeID(), "index", dupPB.BlockIndex, "blockNumber", dupPB.BlockNum(), "blockHash", dupPB.Block.Hash())
 			cbft.network.Broadcast(dupPB)
 		}
 	})
