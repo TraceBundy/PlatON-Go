@@ -421,8 +421,8 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 					if status == commitStatusIdle {
 						if shouldSeal, err := cbftEngine.ShouldSeal(timestamp); err == nil {
 							if shouldSeal {
-								failpoint.Inject("mock-PB02", func() {
-									log.Warn("[mock-PB02]Continuing to commit block", "nodeId", cbftEngine.NodeID())
+								failpoint.Inject("Byzantine-PB02", func() {
+									log.Warn("[Mock-PB02]Continuing to commit block", "nodeId", cbftEngine.NodeID())
 									// continuing to commit block
 									i := uint32(0)
 									baseBlock := w.engine.NextBaseBlock()

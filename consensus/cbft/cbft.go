@@ -725,14 +725,11 @@ func (cbft *Cbft) OnSeal(block *types.Block, results chan<- *types.Block, stop <
 		ProposalIndex: uint32(me.Index),
 	}
 
-	cbft.MockPB03(uint32(me.Index))
+	cbft.byzantineNotify()
 
 	// Next index is equal zero, This view does not produce a block.
 	if cbft.state.NextViewBlockIndex() == 0 {
-		cbft.MockPB04(uint32(me.Index))
-		cbft.MockPB05(uint32(me.Index))
-		cbft.MockPB06(uint32(me.Index))
-		cbft.MockPB07(uint32(me.Index))
+		cbft.byzantineNotify()
 		parentBlock, parentQC := cbft.blockTree.FindBlockAndQC(block.ParentHash(), block.NumberU64()-1)
 		if parentBlock == nil {
 			cbft.log.Error("Can not find parent block", "number", block.Number(), "parentHash", block.ParentHash())
@@ -1363,16 +1360,13 @@ func (cbft *Cbft) checkViewChangeQC(pb *protocols.PrepareBlock) error {
 	}
 
 	if needViewChangeQC(pb) && pb.ViewChangeQC == nil {
-		cbft.log.Warn("[Mock-PB07]PrepareBlock need ViewChangeQC", "prepareBlock", pb.String())
 		return authFailedError{err: fmt.Errorf("prepareBlock need ViewChangeQC")}
 	}
 	if pb.ViewChangeQC != nil {
 		if !baseViewChangeQC(pb) {
-			cbft.log.Warn("[Mock-PB04]PrepareBlock is not based on viewChangeQC maxBlock", "viewchangeQC", pb.ViewChangeQC.String(), "PrepareBlock", pb.String())
 			return authFailedError{err: fmt.Errorf("prepareBlock is not based on viewChangeQC maxBlock, viewchangeQC:%s, PrepareBlock:%s", pb.ViewChangeQC.String(), pb.String())}
 		}
 		if err := cbft.verifyViewChangeQC(pb.ViewChangeQC); err != nil {
-			cbft.log.Warn("[Mock-PB05]Verify viewchange qc failed", "viewchangeQC", pb.ViewChangeQC.String(), "PrepareBlock", pb.String(), "err", err.Error())
 			return err
 		}
 	}
@@ -1483,7 +1477,6 @@ func (cbft *Cbft) verifyConsensusMsg(msg ctypes.ConsensusMsg) (*cbfttypes.Valida
 	}
 
 	if err := cbft.verifyPrepareQC(oriNumber, oriHash, prepareQC); err != nil {
-		cbft.log.Warn("[Mock-PB06]Verify prepare qc failed", "prepareQC", prepareQC.String(), "oriNumber", oriNumber, "oriHash", oriHash, "err", err.Error())
 		return nil, err
 	}
 
