@@ -150,29 +150,29 @@ func (cbft *Cbft) MockPB06(proposalIndex uint32, value failpoint.Value) {
 
 // 提议人基于lockBlock发出index=0 的prepare，并携带lockBlock的prepareQC、基于qcBlock的viewChangeQC
 // 预期结果：
+// 1 lastViewChangeQC
 func (cbft *Cbft) MockPB07(proposalIndex uint32) {
-	if cbft.state.LastViewChangeQC() != nil {
-		lockBlock := cbft.state.HighestLockBlock()
-		_, lockQC := cbft.blockTree.FindBlockAndQC(lockBlock.Hash(), lockBlock.NumberU64())
-		num := lockBlock.Number()
-		header := &types.Header{
-			Number:     num.Add(num, common.Big1),
-			ParentHash: lockBlock.Hash(),
-		}
-		b := types.NewBlockWithHeader(header)
-		pb := &protocols.PrepareBlock{
-			Epoch:         cbft.state.Epoch(),
-			ViewNumber:    cbft.state.ViewNumber(),
-			Block:         b,
-			BlockIndex:    cbft.state.NextViewBlockIndex(),
-			ProposalIndex: proposalIndex,
-		}
-		pb.PrepareQC = lockQC
-		pb.ViewChangeQC = cbft.state.LastViewChangeQC()
-		cbft.signMsgByBls(pb)
-		cbft.log.Warn("[Mock-PB04]Broadcast mock prepareBlock base lock block,normal viewChangeQC", "nodeId", cbft.NodeID(), "mockPB", pb.String(), "mockPB.prepareQC", pb.PrepareQC.String(), "mockPB.viewChangeQC", pb.ViewChangeQC.String())
-		cbft.network.Broadcast(pb)
+	lockBlock := cbft.state.HighestLockBlock()
+	_, lockQC := cbft.blockTree.FindBlockAndQC(lockBlock.Hash(), lockBlock.NumberU64())
+
+	// mock block base lockBlock
+	block := mockBlock(lockBlock.NumberU64()+1, lockBlock.Hash())
+	prepareBlock := &protocols.PrepareBlock{
+		Epoch:         cbft.state.Epoch(),
+		ViewNumber:    cbft.state.ViewNumber(),
+		Block:         block,
+		BlockIndex:    cbft.state.NextViewBlockIndex(),
+		ProposalIndex: proposalIndex,
 	}
+	prepareBlock.PrepareQC = lockQC
+	prepareBlock.ViewChangeQC = cbft.state.LastViewChangeQC()
+	cbft.signMsgByBls(prepareBlock)
+	if prepareBlock.ViewChangeQC != nil {
+		cbft.log.Warn("[Mock-PB07]Broadcast mock prepareBlock base lock block,normal viewChangeQC", "nodeId", cbft.NodeID(), "prepareBlock", prepareBlock.String(), "prepareQC", prepareBlock.PrepareQC.String(), "viewChangeQC", prepareBlock.ViewChangeQC.String())
+	} else {
+		cbft.log.Warn("[Mock-PB07]Broadcast mock prepareBlock base lock block,normal viewChangeQC", "nodeId", cbft.NodeID(), "prepareBlock", prepareBlock.String(), "prepareQC", prepareBlock.PrepareQC.String())
+	}
+	cbft.network.Broadcast(prepareBlock)
 }
 
 // 提议人基于lockBlock发出index=0的prepare，并携带lockBlock的prepareQC、伪造maxBlock=lockBlock的viewChangeQC
