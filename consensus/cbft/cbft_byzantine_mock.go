@@ -10,7 +10,7 @@ import (
 	"math/big"
 )
 
-func (cbft *Cbft) byzantineNotify() {
+func (cbft *Cbft) byzantineMock() {
 	me, _ := cbft.validatorPool.GetValidatorByNodeID(cbft.state.Epoch(), cbft.NodeID())
 	proposalIndex := me.Index
 	cbft.byzantineHandler(proposalIndex)
@@ -237,7 +237,7 @@ func (cbft *Cbft) MockPB08(proposalIndex uint32) {
 	}
 }
 
-// 提议人基于lockBlock发出index=0的prepare，并携带lockBlock的prepareQC，不携带viewChangeQC
+// 提议人基于lockBlock发出index=0 的prepare，并携带lockBlock的prepareQC，不携带viewChangeQC
 // 预期结果：其他节点收到此消息，校验消息必须携带ViewChangeQC
 func (cbft *Cbft) MockPB09(proposalIndex uint32) {
 	if cbft.state.LastViewChangeQC() != nil {
@@ -261,7 +261,7 @@ func (cbft *Cbft) MockPB09(proposalIndex uint32) {
 	}
 }
 
-// 提议人基于qcBlock发出index=0的prepare，并携带lockBlock的prepareQC，正常的viewChangeQC
+// 提议人基于qcBlock发出index=0 的prepare，并携带lockBlock的prepareQC，正常的viewChangeQC
 // 预期结果：其他节点收到此消息，校验prepareQC不通过
 func (cbft *Cbft) MockPB10(proposalIndex uint32) {
 	if cbft.state.LastViewChangeQC() != nil {
@@ -286,7 +286,7 @@ func (cbft *Cbft) MockPB10(proposalIndex uint32) {
 	}
 }
 
-// 下一轮提议人恶意提前进入下一轮view，基于上一轮最新确认的区块发出index=0的prepare，并携带正确的prepareQC，伪造多份自己签名的viewChangeQC，试图让其他节点changeView
+// 下一轮提议人恶意提前进入下一轮view，基于上一轮最新确认的区块发出index=0 的prepare，并携带正确的prepareQC，伪造多份自己签名的viewChangeQC，试图让其他节点changeView
 // 预期结果：其他节点收到此消息，校验viewChangeQC 不通过
 func (cbft *Cbft) MockPB11(proposalIndex uint32) {
 	mockViewChangeQC := func(qc *ctypes.QuorumCert) *ctypes.ViewChangeQC {
