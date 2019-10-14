@@ -89,7 +89,7 @@ func (cbft *Cbft) OnPrepareBlock(id string, msg *protocols.PrepareBlock) error {
 	cbft.state.AddPrepareBlock(msg)
 	cbft.log.Info("Receive new prepareBlock", "msgHash", msg.MsgHash(), "prepare", msg.String())
 	cbft.findExecutableBlock()
-	cbft.byzantineMock() // PB01、PB03、PB04、PB11、PB12
+	cbft.byzantineMock() // PB01、PB02、PB03、PB04、PB11、PB12
 	return nil
 }
 
@@ -139,7 +139,7 @@ func (cbft *Cbft) OnPrepareVote(id string, msg *protocols.PrepareVote) error {
 
 	cbft.insertPrepareQC(msg.ParentQC)
 	cbft.findQCBlock()
-	cbft.byzantineMock() // PB01、PB03、PB04、PB11、PB12
+	cbft.byzantineMock() // PB01、PB02、PB03、PB04、PB11、PB12
 	return nil
 }
 
