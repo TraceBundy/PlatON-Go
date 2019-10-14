@@ -98,7 +98,6 @@ func (cbft *Cbft) OnPrepareBlock(id string, msg *protocols.PrepareBlock) error {
 func (cbft *Cbft) OnPrepareVote(id string, msg *protocols.PrepareVote) error {
 	cbft.log.Debug("Receive PrepareVote", "id", id, "msg", msg.String())
 	if err := cbft.safetyRules.PrepareVoteRules(msg); err != nil {
-
 		if err.Common() {
 			cbft.log.Debug("Preparevote rules fail", "number", msg.BlockHash, "hash", msg.BlockHash, "err", err)
 			return err
@@ -244,6 +243,7 @@ func (cbft *Cbft) OnInsertQCBlock(blocks []*types.Block, qcs []*ctypes.QuorumCer
 		cbft.log.Info("Insert QC block success", "qcBlock", qc.String())
 	}
 
+	cbft.findExecutableBlock()
 	return nil
 }
 
@@ -736,7 +736,7 @@ func (cbft *Cbft) changeView(epoch, viewNumber uint64, block *types.Block, qc *c
 		if qc.Epoch != epoch {
 			minuend = state.DefaultViewNumber
 		}
-		return viewNumber - minuend
+		return viewNumber - minuend + 1
 	}
 	// syncingCache is belong to last view request, clear all sync cache
 	cbft.syncingCache.Purge()
