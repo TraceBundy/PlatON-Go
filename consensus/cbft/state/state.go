@@ -460,7 +460,11 @@ func (vs *ViewState) NextViewBlockIndex() uint32 {
 }
 
 func (vs *ViewState) MaxViewBlockIndex() uint32 {
-	return vs.viewBlocks.MaxIndex()
+	max := vs.viewBlocks.MaxIndex()
+	if max == math.MaxUint32 {
+		return 0
+	}
+	return max
 }
 
 func (vs *ViewState) MaxQCIndex() uint32 {
@@ -472,7 +476,11 @@ func (vs *ViewState) ViewVoteSize() int {
 }
 
 func (vs *ViewState) MaxViewVoteIndex() uint32 {
-	return vs.viewVotes.MaxIndex()
+	max := vs.viewVotes.MaxIndex()
+	if max == math.MaxUint32 {
+		return 0
+	}
+	return max
 }
 
 func (vs *ViewState) PrepareVoteLenByIndex(index uint32) int {
