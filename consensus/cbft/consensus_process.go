@@ -329,11 +329,15 @@ func (cbft *Cbft) insertPrepareQC(qc *ctypes.QuorumCert) {
 // Asynchronous execution block callback function
 func (cbft *Cbft) onAsyncExecuteStatus(s *executor.BlockExecuteStatus) {
 	cbft.log.Debug("Async Execute Block", "hash", s.Hash, "number", s.Number)
+	index, finish := cbft.state.Executing()
 	if s.Err != nil {
+		// remove block from viewBlocks by blockIndex
+		cbft.state.RemovePrepareBlock(index)
+		// remove votes from viewVotes by blockIndex
+		cbft.state.RemovePrepareVote(index)
 		cbft.log.Error("Execute block failed", "err", s.Err, "hash", s.Hash, "number", s.Number)
 		return
 	}
-	index, finish := cbft.state.Executing()
 	if !finish {
 		block := cbft.state.ViewBlockByIndex(index)
 		if block != nil {
@@ -462,6 +466,9 @@ func (cbft *Cbft) findExecutableBlock() {
 				cbft.log.Error("Async Execute block failed", "error", err)
 			}
 			cbft.state.SetExecuting(0, false)
+		} else {
+			// try to sync prepareBlock
+			cbft.SyncPrepareBlock("", cbft.state.Epoch(), cbft.state.ViewNumber(), blockIndex+1)
 		}
 	}
 
@@ -479,6 +486,9 @@ func (cbft *Cbft) findExecutableBlock() {
 				cbft.log.Error("Async Execute block failed", "error", err)
 			}
 			cbft.state.SetExecuting(blockIndex+1, false)
+		} else {
+			// try to sync prepareBlock
+			cbft.SyncPrepareBlock("", cbft.state.Epoch(), cbft.state.ViewNumber(), blockIndex+1)
 		}
 	}
 }

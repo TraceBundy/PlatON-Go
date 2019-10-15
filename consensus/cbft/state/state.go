@@ -211,6 +211,16 @@ func (v *viewVotes) index(i uint32) *prepareVotes {
 	return v.Votes[i]
 }
 
+func (v *viewVotes) MaxIndex() uint32 {
+	max := uint32(math.MaxUint32)
+	for index, _ := range v.Votes {
+		if max == math.MaxUint32 || index > max {
+			max = index
+		}
+	}
+	return max
+}
+
 func (v *viewVotes) clear() {
 	v.Votes = make(map[uint32]*prepareVotes)
 }
@@ -445,12 +455,12 @@ func (vs *ViewState) Deadline() time.Time {
 	return vs.viewTimer.deadline
 }
 
-func (vs *ViewState) NumViewBlocks() uint32 {
-	return uint32(vs.viewBlocks.len())
-}
-
 func (vs *ViewState) NextViewBlockIndex() uint32 {
 	return vs.viewBlocks.MaxIndex() + 1
+}
+
+func (vs *ViewState) MaxViewBlockIndex() uint32 {
+	return vs.viewBlocks.MaxIndex()
 }
 
 func (vs *ViewState) MaxQCIndex() uint32 {
@@ -459,6 +469,10 @@ func (vs *ViewState) MaxQCIndex() uint32 {
 
 func (vs *ViewState) ViewVoteSize() int {
 	return len(vs.viewVotes.Votes)
+}
+
+func (vs *ViewState) MaxViewVoteIndex() uint32 {
+	return vs.viewVotes.MaxIndex()
 }
 
 func (vs *ViewState) PrepareVoteLenByIndex(index uint32) int {
@@ -548,6 +562,10 @@ func (vs *ViewState) AddPrepareBlock(pb *protocols.PrepareBlock) {
 	vs.view.viewBlocks.addBlock(&prepareViewBlock{pb})
 }
 
+func (vs *ViewState) RemovePrepareBlock(blockIndex uint32) {
+	delete(vs.view.viewBlocks.Blocks, blockIndex)
+}
+
 func (vs *ViewState) AddQCBlock(block *types.Block, qc *ctypes.QuorumCert) {
 	vs.view.viewBlocks.addBlock(&qcBlock{b: block, qc: qc})
 }
@@ -558,6 +576,10 @@ func (vs *ViewState) AddQC(qc *ctypes.QuorumCert) {
 
 func (vs *ViewState) AddPrepareVote(id uint32, vote *protocols.PrepareVote) {
 	vs.view.viewVotes.addVote(id, vote)
+}
+
+func (vs *ViewState) RemovePrepareVote(blockIndex uint32) {
+	delete(vs.view.viewVotes.Votes, blockIndex)
 }
 
 func (vs *ViewState) AddViewChange(id uint32, viewChange *protocols.ViewChange) {

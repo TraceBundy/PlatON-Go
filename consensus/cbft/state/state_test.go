@@ -19,7 +19,7 @@ func TestNewViewState(t *testing.T) {
 
 	assert.Equal(t, uint64(1), viewState.Epoch())
 	assert.Equal(t, uint64(1), viewState.ViewNumber())
-	assert.Equal(t, uint32(0), viewState.NumViewBlocks())
+	assert.Equal(t, 0, viewState.ViewBlockSize())
 	assert.Equal(t, uint32(0), viewState.NextViewBlockIndex())
 	assert.Equal(t, uint32(math.MaxUint32), viewState.MaxQCIndex())
 	assert.Equal(t, 0, viewState.ViewVoteSize())
@@ -114,6 +114,14 @@ func TestViewBlocks(t *testing.T) {
 	assert.NotNil(t, viewState.ViewBlockByIndex(9))
 	assert.NotNil(t, viewState.PrepareBlockByIndex(9))
 	assert.Equal(t, 10, viewState.ViewBlockSize())
+
+	// remove block
+	viewState.RemovePrepareBlock(5)
+	assert.Equal(t, 9, viewState.viewBlocks.len())
+	assert.Equal(t, uint32(9), viewState.viewBlocks.MaxIndex())
+	assert.Equal(t, viewBlock.hash(), viewState.viewBlocks.Blocks[9].hash())
+	assert.Equal(t, viewBlock.number(), viewState.viewBlocks.Blocks[9].number())
+	assert.Nil(t, viewState.viewBlocks.Blocks[5])
 }
 
 var (
@@ -124,18 +132,25 @@ func TestViewVotes(t *testing.T) {
 	viewState := NewViewState(BaseMs, nil)
 	votes := viewState.viewVotes
 	prepareVotes := []*protocols.PrepareVote{
-		{BlockIndex: uint32(0)},
-		{BlockIndex: uint32(1)},
-		{BlockIndex: uint32(2)},
+		{BlockIndex: uint32(5)},
+		{BlockIndex: uint32(6)},
+		{BlockIndex: uint32(7)},
 	}
 
 	for i, p := range prepareVotes {
 		viewState.AddPrepareVote(uint32(i), p)
 		votes.addVote(uint32(i), p)
 	}
-	assert.Len(t, viewState.AllPrepareVoteByIndex(0), 1)
+	assert.Equal(t, 3, len(viewState.viewVotes.Votes))
+	assert.Equal(t, uint32(7), viewState.MaxViewVoteIndex())
+	assert.Len(t, viewState.AllPrepareVoteByIndex(5), 1)
 	assert.Equal(t, viewState.PrepareVoteLenByIndex(uint32(len(prepareVotes))), 0)
 	assert.Len(t, viewState.AllPrepareVoteByIndex(uint32(len(prepareVotes))), 0)
+
+	// remove votes
+	viewState.RemovePrepareVote(7)
+	assert.Equal(t, 2, len(viewState.viewVotes.Votes))
+	assert.Equal(t, uint32(6), viewState.MaxViewVoteIndex())
 
 	votes.clear()
 	assert.Len(t, votes.Votes, 0)
