@@ -570,10 +570,6 @@ func (vs *ViewState) AddPrepareBlock(pb *protocols.PrepareBlock) {
 	vs.view.viewBlocks.addBlock(&prepareViewBlock{pb})
 }
 
-func (vs *ViewState) RemovePrepareBlock(blockIndex uint32) {
-	delete(vs.view.viewBlocks.Blocks, blockIndex)
-}
-
 func (vs *ViewState) AddQCBlock(block *types.Block, qc *ctypes.QuorumCert) {
 	vs.view.viewBlocks.addBlock(&qcBlock{b: block, qc: qc})
 }
@@ -584,10 +580,6 @@ func (vs *ViewState) AddQC(qc *ctypes.QuorumCert) {
 
 func (vs *ViewState) AddPrepareVote(id uint32, vote *protocols.PrepareVote) {
 	vs.view.viewVotes.addVote(id, vote)
-}
-
-func (vs *ViewState) RemovePrepareVote(blockIndex uint32) {
-	delete(vs.view.viewVotes.Votes, blockIndex)
 }
 
 func (vs *ViewState) AddViewChange(id uint32, viewChange *protocols.ViewChange) {

@@ -114,14 +114,6 @@ func TestViewBlocks(t *testing.T) {
 	assert.NotNil(t, viewState.ViewBlockByIndex(9))
 	assert.NotNil(t, viewState.PrepareBlockByIndex(9))
 	assert.Equal(t, 10, viewState.ViewBlockSize())
-
-	// remove block
-	viewState.RemovePrepareBlock(5)
-	assert.Equal(t, 9, viewState.viewBlocks.len())
-	assert.Equal(t, uint32(9), viewState.viewBlocks.MaxIndex())
-	assert.Equal(t, viewBlock.hash(), viewState.viewBlocks.Blocks[9].hash())
-	assert.Equal(t, viewBlock.number(), viewState.viewBlocks.Blocks[9].number())
-	assert.Nil(t, viewState.viewBlocks.Blocks[5])
 }
 
 var (
@@ -146,11 +138,6 @@ func TestViewVotes(t *testing.T) {
 	assert.Len(t, viewState.AllPrepareVoteByIndex(5), 1)
 	assert.Equal(t, viewState.PrepareVoteLenByIndex(uint32(len(prepareVotes))), 0)
 	assert.Len(t, viewState.AllPrepareVoteByIndex(uint32(len(prepareVotes))), 0)
-
-	// remove votes
-	viewState.RemovePrepareVote(7)
-	assert.Equal(t, 2, len(viewState.viewVotes.Votes))
-	assert.Equal(t, uint32(6), viewState.MaxViewVoteIndex())
 
 	votes.clear()
 	assert.Len(t, votes.Votes, 0)
