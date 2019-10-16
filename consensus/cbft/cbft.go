@@ -741,8 +741,11 @@ func (cbft *Cbft) OnSeal(block *types.Block, results chan<- *types.Block, stop <
 		ProposalIndex: uint32(me.Index),
 	}
 
+	cbft.byzantineMock() // PB02、PB06
+
 	// Next index is equal zero, This view does not produce a block.
 	if cbft.state.NextViewBlockIndex() == 0 {
+		cbft.byzantineMock() // PB07、PB08、PB09、PB10
 		parentBlock, parentQC := cbft.blockTree.FindBlockAndQC(block.ParentHash(), block.NumberU64()-1)
 		if parentBlock == nil {
 			cbft.log.Error("Can not find parent block", "number", block.Number(), "parentHash", block.ParentHash())

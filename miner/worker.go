@@ -18,6 +18,7 @@ package miner
 
 import (
 	"encoding/hex"
+	"github.com/pingcap/failpoint"
 	"math/big"
 	"runtime"
 	"sync"
@@ -420,6 +421,28 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 					if status == commitStatusIdle {
 						if shouldSeal, err := cbftEngine.ShouldSeal(timestamp); err == nil {
 							if shouldSeal {
+								failpoint.Inject("Byzantine-PB05", func() {
+									log.Warn("[Mock-PB05]Continuing to commit block", "nodeId", cbftEngine.NodeID())
+									// continuing to commit block
+									i := uint32(0)
+									baseBlock := w.engine.NextBaseBlock()
+									commitBlock := baseBlock
+									for {
+										if i >= w.config.Cbft.Amount {
+											break
+										}
+										timestamp = time.Now()
+										baseBlock := w.engine.NextBaseBlock()
+										blockDeadline := w.engine.(consensus.Bft).CalcBlockDeadline(timestamp)
+										if i == uint32(0) || baseBlock.NumberU64() == commitBlock.NumberU64()+1 {
+											commit(false, commitInterruptResubmit, baseBlock, blockDeadline)
+											commitBlock = baseBlock
+											i = i + 1
+										}
+									}
+									failpoint.Continue()
+								})
+
 								if shouldCommit, commitBlock := w.shouldCommit(timestamp); shouldCommit {
 									log.Debug("Begin to package new block regularly")
 									blockDeadline := w.engine.(consensus.Bft).CalcBlockDeadline(timestamp)
