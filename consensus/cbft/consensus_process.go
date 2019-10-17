@@ -116,7 +116,7 @@ func (cbft *Cbft) OnPrepareVote(id string, msg *protocols.PrepareVote) error {
 		if err.Fetch() {
 			if msg.ParentQC != nil {
 				cbft.log.Info("Epoch or viewNumber higher than local, try to fetch block", "fetchHash", msg.ParentQC.BlockHash, "fetchNumber", msg.ParentQC.BlockNumber)
-				cbft.fetchBlock(id, msg.ParentQC.BlockHash, msg.ParentQC.BlockNumber, msg.ParentQC)
+				cbft.fetchBlock(id, msg.ParentQC.BlockHash, msg.BlockNumber-1, msg.ParentQC)
 			}
 		} else if err.FetchPrepare() {
 			cbft.prepareVoteFetchRules(id, msg)
