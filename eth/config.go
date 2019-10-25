@@ -53,6 +53,10 @@ var DefaultConfig = Config{
 	DatabaseCache: 768,
 	TrieCache:     256,
 	TrieTimeout:   60 * time.Minute,
+	DBDisabledGC:  false,
+	DBGCInterval:  86400,
+	DBGCTimeout:   time.Minute,
+	DBGCBlock:     10,
 	MinerGasFloor: 4000 * 21000 * 1.2,
 	MinerGasCeil:  4000 * 21000 * 1.2,
 	MinerGasPrice: big.NewInt(params.GVon),
@@ -121,6 +125,11 @@ type Config struct {
 	DatabaseCache      int
 	TrieCache          int
 	TrieTimeout        time.Duration
+	DBDisabledGC       bool
+	DBGCInterval       uint64
+	DBGCTimeout        time.Duration
+	DBGCMpt            bool
+	DBGCBlock          uint64
 
 	// Mining-related options
 	MinerExtraData []byte `toml:",omitempty"`

@@ -165,6 +165,13 @@ var (
 		utils.CbftBlsPriKeyFileFlag,
 		utils.CbftBlacklistDeadlineFlag,
 	}
+
+	dbFlags = []cli.Flag{
+		utils.DBNoGCFlag,
+		utils.DBGCIntervalFlag,
+		utils.DBGCTimeoutFlag,
+		utils.DBGCMptFlag,
+	}
 )
 
 func init() {
@@ -212,6 +219,7 @@ func init() {
 	//app.Flags = append(app.Flags, vcFlags...)
 	// for cbft
 	app.Flags = append(app.Flags, cbftFlags...)
+	app.Flags = append(app.Flags, dbFlags...)
 
 	app.Before = func(ctx *cli.Context) error {
 		runtime.GOMAXPROCS(runtime.NumCPU())
