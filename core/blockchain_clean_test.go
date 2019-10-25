@@ -47,7 +47,7 @@ func TestScanStateTrie(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	triedb.Commit(root, false)
+	triedb.Commit(root, false, nil)
 	//fmt.Println("commit db", time.Since(start), "memdb", len(memdb.Keys()), "kv", len(kv))
 
 	delDB := make([][]byte, 0, 100)

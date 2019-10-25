@@ -58,6 +58,39 @@ type DatabaseReader interface {
 	Has(key []byte) (bool, error)
 }
 
+type CommitReader interface {
+	OnNode([]byte)
+	OnPreImage([]byte)
+}
+
+type CommitBatch struct {
+	batch ethdb.Batch
+	cr    CommitReader
+}
+
+func (cb *CommitBatch) Put(key []byte, value []byte) error {
+	if cb.cr != nil {
+		cb.cr.OnNode(key)
+	}
+	return cb.batch.Put(key, value)
+}
+
+func (cb *CommitBatch) Delete(key []byte) error {
+	return cb.batch.Delete(key)
+}
+
+func (cb *CommitBatch) ValueSize() int {
+	return cb.batch.ValueSize()
+}
+
+func (cb *CommitBatch) Write() error {
+	return cb.batch.Write()
+}
+
+func (cb *CommitBatch) Reset() {
+	cb.batch.Reset()
+}
+
 // Database is an intermediate write layer between the trie data structures and
 // the disk database. The aim is to accumulate trie writes in-memory and only
 // periodically flush a couple tries to disk, garbage collecting the remainder.
@@ -612,7 +645,7 @@ func (db *Database) Cap(limit common.StorageSize) error {
 // to disk, forcefully tearing down all references in both directions.
 //
 // As a side effect, all pre-images accumulated up to this point are also written.
-func (db *Database) Commit(node common.Hash, report bool) error {
+func (db *Database) Commit(node common.Hash, report bool, cr CommitReader) error {
 	// Create a database batch to flush persistent data out. It is important that
 	// outside code doesn't see an inconsistent state (referenced data removed from
 	// memory cache during commit but not yet in persistent storage). This is ensured
@@ -620,11 +653,20 @@ func (db *Database) Commit(node common.Hash, report bool) error {
 	db.lock.RLock()
 
 	start := time.Now()
-	batch := db.diskdb.NewBatch()
+	dbBatch := db.diskdb.NewBatch()
+
+	batch := &CommitBatch{
+		batch: dbBatch,
+		cr:    cr,
+	}
 
 	// Move all of the accumulated preimages into a write batch
 	for hash, preimage := range db.preimages {
-		if err := batch.Put(db.secureKey(hash[:]), preimage); err != nil {
+		preHash := db.secureKey(hash[:])
+		if cr != nil {
+			cr.OnPreImage(preHash)
+		}
+		if err := dbBatch.Put(preHash, preimage); err != nil {
 			log.Error("Failed to commit preimage from trie database", "err", err)
 			db.lock.RUnlock()
 			return err

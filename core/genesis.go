@@ -324,7 +324,7 @@ func (g *Genesis) ToBlock(db ethdb.Database, sdb snapshotdb.DB) *types.Block {
 	if _, err := statedb.Commit(false); nil != err {
 		panic("Failed to commit genesis stateDB: " + err.Error())
 	}
-	if err := statedb.Database().TrieDB().Commit(root, true); nil != err {
+	if err := statedb.Database().TrieDB().Commit(root, true, nil); nil != err {
 		panic("Failed to trieDB commit by genesis: " + err.Error())
 	}
 

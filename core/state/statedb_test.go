@@ -124,8 +124,8 @@ func TestNewStateDBAndCopy(t *testing.T) {
 	if _, err := s1c.Commit(false); err != nil {
 		t.Fatalf("failed to commit s1c state: %v", err)
 	}
-	assert.Nil(t, s1.db.TrieDB().Commit(s1.Root(), false))
-	assert.Nil(t, s1c.db.TrieDB().Commit(s1c.Root(), false))
+	assert.Nil(t, s1.db.TrieDB().Commit(s1.Root(), false, nil))
+	assert.Nil(t, s1c.db.TrieDB().Commit(s1c.Root(), false, nil))
 
 	// test new statedb
 	st2 := s1.NewStateDB()
@@ -211,8 +211,8 @@ func TestNewStateDBAndCopy(t *testing.T) {
 		}
 	}
 
-	assert.Nil(t, s3.db.TrieDB().Commit(s1.Root(), false))
-	assert.Nil(t, s1cc.db.TrieDB().Commit(s1cc.Root(), false))
+	assert.Nil(t, s3.db.TrieDB().Commit(s1.Root(), false, nil))
+	assert.Nil(t, s1cc.db.TrieDB().Commit(s1cc.Root(), false, nil))
 
 	for _, k := range db.Keys() {
 		if _, err := dbc.Get(k); err != nil {
@@ -255,7 +255,7 @@ func TestStateStorageValueCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s1.db.TrieDB().Commit(root, true); err != nil {
+	if err := s1.db.TrieDB().Commit(root, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	s2, err := New(root, NewDatabase(db))
@@ -286,7 +286,7 @@ func TestStateStorageValueDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s1.db.TrieDB().Commit(root, true); err != nil {
+	if err := s1.db.TrieDB().Commit(root, true, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -328,7 +328,7 @@ func TestStateStorageRevert(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s1.db.TrieDB().Commit(root, true)
+	s1.db.TrieDB().Commit(root, true, nil)
 
 	assert.Equal(t, value1, s1.GetState(addr, key1))
 	obj := s1.getStateObject(addr)
