@@ -62,6 +62,7 @@ type DatabaseReader interface {
 type CommitReader interface {
 	OnNode([]byte)
 	OnPreImage([]byte)
+	OnWrite()
 }
 
 type CommitBatch struct {
@@ -85,6 +86,9 @@ func (cb *CommitBatch) ValueSize() int {
 }
 
 func (cb *CommitBatch) Write() error {
+	if cb.cr != nil {
+		cb.cr.OnWrite()
+	}
 	return cb.batch.Write()
 }
 
