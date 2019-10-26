@@ -10,8 +10,7 @@ import (
 )
 
 var (
-	emptyState   = crypto.Keccak256Hash(nil)
-	securePreifx = []byte("secure-key-")
+	emptyState = crypto.Keccak256Hash(nil)
 )
 
 type keyCallback func([]byte)
@@ -28,8 +27,7 @@ func ScanStateTrie(root common.Hash, db *trie.Database, onNode keyCallback, onVa
 			onNode(iter.Hash().Bytes())
 		}
 		if iter.Leaf() {
-			origKey := append(securePreifx, iter.LeafKey()...)
-			onPreImage(origKey)
+			onPreImage(iter.LeafKey())
 
 			var account state.Account
 			if err := rlp.DecodeBytes(iter.LeafBlob(), &account); err != nil {
@@ -58,8 +56,7 @@ func ScanAccountTrie(root common.Hash, db *trie.Database, onNode keyCallback, on
 			onNode(iter.Hash().Bytes())
 		}
 		if iter.Leaf() {
-			origKey := append(securePreifx, iter.LeafKey()...)
-			onPreImage(origKey)
+			onPreImage(iter.LeafKey())
 			var valueKey common.Hash
 			var buf []byte
 			if err := rlp.DecodeBytes(iter.LeafBlob(), &buf); err != nil {

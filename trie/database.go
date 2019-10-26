@@ -43,8 +43,9 @@ var (
 	memcacheCommitSizeMeter  = metrics.NewRegisteredMeter("trie/memcache/commit/size", nil)
 )
 
-// secureKeyPrefix is the database key prefix used to store trie node preimages.
-var secureKeyPrefix = []byte("secure-key-")
+// SecureKeyPrefix is the database key prefix used to store trie node preimages.
+var SecureKeyPrefix = []byte("secure-key-")
+var MerklePrefix = []byte("m-")
 
 // secureKeyLength is the length of the above prefix + 32byte hash.
 const secureKeyLength = 11 + 32
@@ -377,7 +378,7 @@ func (db *Database) node(hash common.Hash, cachegen uint16) node {
 		return node.obj(hash, cachegen)
 	}
 	// Content unavailable in memory, attempt to retrieve from disk
-	enc, err := db.diskdb.Get(hash[:])
+	enc, err := db.diskdb.Get(append(MerklePrefix, hash[:]...))
 	if err != nil || enc == nil {
 		return nil
 	}
@@ -397,7 +398,7 @@ func (db *Database) Node(hash common.Hash) ([]byte, error) {
 		return node.rlp(), nil
 	}
 	// Content unavailable in memory, attempt to retrieve from disk
-	return db.diskdb.Get(hash[:])
+	return db.diskdb.Get(append(MerklePrefix, hash[:]...))
 }
 
 // preimage retrieves a cached trie node pre-image from memory. If it cannot be
@@ -413,7 +414,7 @@ func (db *Database) Preimage(hash common.Hash) ([]byte, error) {
 		return preimage, nil
 	}
 	secureKey := make([]byte, secureKeyLength)
-	secureKey = append(secureKey[:0], secureKeyPrefix...)
+	secureKey = append(secureKey[:0], SecureKeyPrefix...)
 	secureKey = append(secureKey, hash[:]...)
 	// Content unavailable in memory, attempt to retrieve from disk
 	return db.diskdb.Get(secureKey)
@@ -423,7 +424,7 @@ func (db *Database) Preimage(hash common.Hash) ([]byte, error) {
 // buffer. The caller must not hold onto the return value because it will become
 // invalid on the next call.
 func (db *Database) secureKey(key []byte) []byte {
-	buf := append(db.seckeybuf[:0], secureKeyPrefix...)
+	buf := append(db.seckeybuf[:0], SecureKeyPrefix...)
 	buf = append(buf, key...)
 	return buf
 }
@@ -732,7 +733,7 @@ func (db *Database) commit(hash common.Hash, batch ethdb.Batch) error {
 			return err
 		}
 	}
-	if err := batch.Put(hash[:], node.rlp()); err != nil {
+	if err := batch.Put(append(MerklePrefix, hash[:]...), node.rlp()); err != nil {
 		return err
 	}
 	// If we've reached an optimal batch size, commit and start over

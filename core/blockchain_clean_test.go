@@ -8,10 +8,13 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/common/hexutil"
 	"github.com/PlatONnetwork/PlatON-Go/core/state"
 	"github.com/PlatONnetwork/PlatON-Go/ethdb"
+	"github.com/PlatONnetwork/PlatON-Go/trie"
 	"github.com/stretchr/testify/assert"
 	"math/big"
 	"testing"
 )
+
+var securePreifx = []byte("secure-key-")
 
 func randBytes(n int) []byte {
 	r := make([]byte, n)
@@ -53,6 +56,7 @@ func TestScanStateTrie(t *testing.T) {
 	delDB := make([][]byte, 0, 100)
 	delKv := make([][]byte, 0, 100)
 	onNode := func(hash []byte) {
+		hash = append(trie.MerklePrefix, hash...)
 		v, _ := memdb.Get(hash)
 		if v == nil {
 			t.Fatal(fmt.Sprintf("%s", hexutil.Encode(hash)))
@@ -60,6 +64,7 @@ func TestScanStateTrie(t *testing.T) {
 		delDB = append(delDB, hash)
 	}
 	onValue := func(hash []byte) {
+		hash = append(trie.MerklePrefix, hash...)
 		v, _ := memdb.Get(hash)
 		if v == nil {
 			for i, k := range memdb.Keys() {
@@ -70,6 +75,7 @@ func TestScanStateTrie(t *testing.T) {
 		delKv = append(delKv, hash)
 	}
 	onPreImage := func(hash []byte) {
+		hash = append(trie.SecureKeyPrefix, hash...)
 		if value, _ := memdb.Get(hash); value != nil {
 			delete(kv, string(value))
 		} else {
@@ -77,6 +83,7 @@ func TestScanStateTrie(t *testing.T) {
 		}
 		delDB = append(delDB, hash)
 	}
+
 	//start = time.Now()
 	if err := ScanStateTrie(root, triedb, onNode, onValue, onPreImage); err != nil {
 		t.Fatal(err)
