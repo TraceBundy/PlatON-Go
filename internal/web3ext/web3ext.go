@@ -411,6 +411,10 @@ web3._extend({
 			name: 'economicConfig',
 			call: 'debug_economicConfig',
 		}),
+		new web3._extend.Method({
+			name: 'cleanup',
+			call: 'debug_cleanup',
+		}),
 	],
 	properties: []
 });

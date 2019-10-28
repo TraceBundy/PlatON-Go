@@ -222,6 +222,8 @@ func GenerateBlockChain2(config *params.ChainConfig, parent *types.Block, engine
 		MaxFutureBlocks: 256,
 		BadBlockLimit:   10,
 		TriesInMemory:   128,
+		DBGCInterval:    86400,
+		DBGCTimeout:     time.Minute,
 	}
 	blockchain, _ := NewBlockChain(db, cacheConfig, config, engine, vm.Config{}, nil)
 	blocks, receipts := make(types.Blocks, n), make([]types.Receipts, n)
@@ -274,6 +276,8 @@ func GenerateBlockChain(config *params.ChainConfig, parent *types.Block, engine 
 		MaxFutureBlocks: 256,
 		BadBlockLimit:   10,
 		TriesInMemory:   128,
+		DBGCInterval:    86400,
+		DBGCTimeout:     time.Minute,
 	}
 	blockchain, _ := NewBlockChain(db, cacheConfig, config, engine, vm.Config{}, nil)
 	blocks, receipts := make(types.Blocks, n), make([]types.Receipts, n)
