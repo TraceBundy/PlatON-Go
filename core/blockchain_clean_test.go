@@ -164,18 +164,30 @@ func TestCleaner(t *testing.T) {
 	assert.False(t, cleaner.NeedCleanup())
 
 	cleaner.lastNumber = 0
-	cleaner.interval = 200
-	cleaner.Cleanup(100)
-	time.Sleep(500 * time.Millisecond) // Waiting cleanup finish
-	assert.True(t, cleaner.lastNumber == 95)
+	cleaner.cleanTimeout = time.Nanosecond
+	cleaner.Cleanup()
+	time.Sleep(100 * time.Millisecond)
+	assert.True(t, cleaner.lastNumber == 0)
 
-	block := blockchain.GetBlockByNumber(180)
+	cleaner.cleanTimeout = time.Minute
+	cleaner.interval = 200
+	cleaner.Cleanup()
+	time.Sleep(500 * time.Millisecond) // Waiting cleanup finish
+	assert.True(t, cleaner.lastNumber == 195)
+
+	block := blockchain.GetBlockByNumber(188)
 	_, err = blockchain.StateAt(block.Root())
 	assert.NotNil(t, err)
+
+	block = blockchain.GetBlockByNumber(196)
+	statedb, _ := blockchain.StateAt(block.Root())
+	assert.NotNil(t, statedb)
+	buf := statedb.GetState(testAddress, []byte(fmt.Sprintf("abc_%d", block.NumberU64())))
+	assert.Equal(t, string(buf), fmt.Sprintf("abccccccc_%d", block.NumberU64()))
 
 	cleaner.Stop()
 
 	// Test loading last number from database
 	cleaner = NewCleaner(blockchain, 200, time.Minute)
-	assert.Equal(t, cleaner.lastNumber, uint64(95))
+	assert.Equal(t, cleaner.lastNumber, uint64(195))
 }

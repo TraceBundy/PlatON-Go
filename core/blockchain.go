@@ -1054,7 +1054,7 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 
 	// Cleanup storage
 	if !bc.cacheConfig.DBDisabledGC && bc.cleaner.NeedCleanup() {
-		bc.cleaner.Cleanup(bc.CurrentBlock().NumberU64())
+		bc.cleaner.Cleanup()
 	}
 	return status, nil
 }
@@ -1576,5 +1576,5 @@ func (bc *BlockChain) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscript
 
 // Cleanup cleanup database.
 func (bc *BlockChain) Cleanup() {
-	bc.cleaner.Cleanup(bc.CurrentBlock().NumberU64())
+	bc.cleaner.Cleanup()
 }
