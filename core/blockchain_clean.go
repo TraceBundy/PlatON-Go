@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"github.com/PlatONnetwork/PlatON-Go/common"
+	"github.com/PlatONnetwork/PlatON-Go/common/hexutil"
 	"github.com/PlatONnetwork/PlatON-Go/core/state"
 	"github.com/PlatONnetwork/PlatON-Go/crypto"
 	"github.com/PlatONnetwork/PlatON-Go/rlp"
@@ -19,7 +20,7 @@ func ScanStateTrie(root common.Hash, db *trie.Database, onNode keyCallback, onVa
 	var stateTrie *trie.SecureTrie
 	var err error
 	if stateTrie, err = trie.NewSecure(root, db, 0); err != nil {
-		return err
+		return fmt.Errorf("new secure trie failed :%v", err)
 	}
 	iter := stateTrie.NodeIterator(nil)
 	for iter.Next(true) {
@@ -36,10 +37,13 @@ func ScanStateTrie(root common.Hash, db *trie.Database, onNode keyCallback, onVa
 
 			if account.Root != emptyState {
 				if err := ScanAccountTrie(account.Root, db, onNode, onValue, onPreImage); err != nil {
-					return err
+					return fmt.Errorf("scan account trie failed :%v", err)
 				}
 			}
 		}
+	}
+	if iter.Error() != nil {
+		return iter.Error()
 	}
 	return nil
 }
@@ -60,11 +64,14 @@ func ScanAccountTrie(root common.Hash, db *trie.Database, onNode keyCallback, on
 			var valueKey common.Hash
 			var buf []byte
 			if err := rlp.DecodeBytes(iter.LeafBlob(), &buf); err != nil {
-				return err
+				return fmt.Errorf("decode account leaf %s failed : %v", hexutil.Encode(iter.LeafBlob()), err)
 			}
 			valueKey.SetBytes(buf)
 			onValue(valueKey.Bytes())
 		}
+	}
+	if iter.Error() != nil {
+		return iter.Error()
 	}
 	return nil
 }
