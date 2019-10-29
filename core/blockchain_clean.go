@@ -30,6 +30,7 @@ var (
 	idleState     int32  = 0
 	cleaningState int32  = 1
 	maxKeyCount   uint   = 10000000
+	stopping      int32  = 1
 )
 
 type keyCallback func([]byte)
@@ -65,11 +66,13 @@ func (cb *CleanBatch) WriteAndRest() error {
 }
 
 type Cleaner struct {
+	stopped      int32
 	cleaning     int32
 	interval     uint64
 	lastNumber   uint64
 	cleanTimeout time.Duration
 
+	wg        sync.WaitGroup
 	exit      chan struct{}
 	cleanFeed event.Feed
 	scope     event.SubscriptionScope
@@ -83,6 +86,7 @@ type Cleaner struct {
 
 func NewCleaner(blockchain *BlockChain, interval uint64, cleanTimeout time.Duration) *Cleaner {
 	c := &Cleaner{
+		stopped:      0,
 		interval:     interval,
 		lastNumber:   0,
 		cleanTimeout: cleanTimeout,
@@ -106,13 +110,21 @@ func NewCleaner(blockchain *BlockChain, interval uint64, cleanTimeout time.Durat
 	}
 
 	c.scope.Track(c.cleanFeed.Subscribe(c.cleanCh))
+	c.wg.Add(1)
 	go c.loop()
 	return c
 }
 
 func (c *Cleaner) Stop() {
+	if atomic.LoadInt32(&c.stopped) == stopping {
+		return
+	}
+
 	c.scope.Close()
 	close(c.exit)
+
+	atomic.StoreInt32(&c.stopped, stopping)
+	c.wg.Wait()
 }
 
 func (c *Cleaner) Cleanup() {
@@ -143,10 +155,13 @@ func (c *Cleaner) OnWrite() {
 }
 
 func (c *Cleaner) loop() {
+	defer c.wg.Done()
+
 	for {
 		select {
 		case <-c.cleanCh:
 			if atomic.LoadInt32(&c.cleaning) == idleState {
+				c.wg.Add(1)
 				go c.cleanup()
 			}
 		case <-c.exit:
@@ -156,6 +171,8 @@ func (c *Cleaner) loop() {
 }
 
 func (c *Cleaner) cleanup() {
+	defer c.wg.Done()
+
 	if atomic.LoadInt32(&c.cleaning) == cleaningState {
 		return
 	}
@@ -182,9 +199,9 @@ func (c *Cleaner) cleanup() {
 	)
 
 	t := time.Now()
-	log.Debug("Start cleanup database", "interval", c.interval, "cleanTimeout", c.cleanTimeout, "lastNumber", atomic.LoadUint64(&c.lastNumber), "number", currentBlock.NumberU64(), "hash", currentBlock.Hash())
+	log.Info("Start cleanup database", "interval", c.interval, "cleanTimeout", c.cleanTimeout, "lastNumber", atomic.LoadUint64(&c.lastNumber), "number", currentBlock.NumberU64(), "hash", currentBlock.Hash())
 	defer func() {
-		log.Debug("Finish cleanup database", "lastNumber", atomic.LoadUint64(&c.lastNumber), "receipts", receipts, "keys", keys, "elapsed", time.Since(t))
+		log.Info("Finish cleanup database", "lastNumber", atomic.LoadUint64(&c.lastNumber), "receipts", receipts, "keys", keys, "elapsed", time.Since(t))
 	}()
 
 	for number := lastNumber; number <= cleanPoint; number++ {
@@ -197,7 +214,7 @@ func (c *Cleaner) cleanup() {
 		rawdb.DeleteReceipts(db, headerByNumber.Hash(), headerByNumber.Number.Uint64())
 		receipts++
 
-		if time.Since(t) >= c.cleanTimeout {
+		if time.Since(t) >= c.cleanTimeout || atomic.LoadInt32(&c.stopped) == stopping {
 			atomic.StoreUint64(&c.lastNumber, number)
 			db.Put(lastNumberKey, common.Uint64ToBytes(number))
 			return
@@ -236,7 +253,7 @@ func (c *Cleaner) cleanup() {
 				}
 			}
 
-			if time.Since(t) >= c.cleanTimeout {
+			if time.Since(t) >= c.cleanTimeout || atomic.LoadInt32(&c.stopped) == stopping {
 				if c.batch.ValueSize() > 0 {
 					c.batch.WriteAndRest()
 				}

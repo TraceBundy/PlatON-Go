@@ -187,7 +187,45 @@ func TestCleaner(t *testing.T) {
 
 	cleaner.Stop()
 
-	// Test loading last number from database
 	cleaner = NewCleaner(blockchain, 200, time.Minute)
 	assert.Equal(t, cleaner.lastNumber, uint64(195))
+}
+
+func TestStopCleaner(t *testing.T) {
+	tmpDir, _ := ioutil.TempDir("", "platon")
+	defer os.RemoveAll(tmpDir)
+
+	db, err := ethdb.NewLDBDatabase(tmpDir, 100, 1024)
+	assert.Nil(t, err)
+
+	blockchain, err := newBlockChainForTesting(db)
+	assert.Nil(t, err)
+
+	cleaner := NewCleaner(blockchain, 100, time.Minute)
+	assert.True(t, cleaner.stopped == 0)
+	cleaner.Cleanup()
+	time.Sleep(time.Millisecond)
+	cleaner.Stop()
+	fmt.Println(cleaner.lastNumber)
+	assert.True(t, cleaner.stopped == stopping)
+	assert.True(t, cleaner.lastNumber < 195)
+}
+
+func TestFilter(t *testing.T) {
+	tmpDir, _ := ioutil.TempDir("", "platon")
+	defer os.RemoveAll(tmpDir)
+
+	db, err := ethdb.NewLDBDatabase(tmpDir, 100, 1024)
+	assert.Nil(t, err)
+
+	blockchain, err := newBlockChainForTesting(db)
+	assert.Nil(t, err)
+
+	cleaner := NewCleaner(blockchain, 100, time.Minute)
+	cleaner.OnNode([]byte("m-abc"))
+	cleaner.OnPreImage([]byte("secure-key-abcde"))
+
+	assert.True(t, cleaner.filterTest([]byte("abc")))
+	assert.True(t, cleaner.filterTest([]byte("abcde")))
+	assert.False(t, cleaner.filterTest([]byte("123")))
 }
