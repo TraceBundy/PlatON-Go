@@ -170,8 +170,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		cacheConfig = &core.CacheConfig{Disabled: config.NoPruning, TrieNodeLimit: config.TrieCache, TrieTimeLimit: config.TrieTimeout,
 			BodyCacheLimit: config.BodyCacheLimit, BlockCacheLimit: config.BlockCacheLimit,
 			MaxFutureBlocks: config.MaxFutureBlocks, BadBlockLimit: config.BadBlockLimit,
-			TriesInMemory: config.TriesInMemory, DBDisabledGC: config.DBDisabledGC, DBGCInterval: config.DBGCInterval,
-			DBGCTimeout: config.DBGCTimeout,
+			TriesInMemory: config.TriesInMemory, DBGCInterval: config.DBGCInterval, DBGCTimeout: config.DBGCTimeout,
 		}
 
 		minningConfig = &core.MiningConfig{MiningLogAtDepth: config.MiningLogAtDepth, TxChanSize: config.TxChanSize,
@@ -182,6 +181,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 			StaleThreshold: config.StaleThreshold, DefaultCommitRatio: config.DefaultCommitRatio,
 		}
 	)
+	cacheConfig.DBDisabledGC.Set(config.DBDisabledGC)
 
 	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, eth.chainConfig, eth.engine, vmConfig, eth.shouldPreserve)
 	if err != nil {

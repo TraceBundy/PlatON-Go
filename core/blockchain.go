@@ -61,8 +61,8 @@ type CacheConfig struct {
 	BadBlockLimit   int
 	TriesInMemory   int
 
-	DBDisabledGC bool   // Whether to disable database garbage collection
-	DBGCInterval uint64 // Block interval for gc
+	DBDisabledGC common.AtomicBool // Whether to disable database garbage collection
+	DBGCInterval uint64            // Block interval for database garbage collection
 	DBGCTimeout  time.Duration
 }
 
@@ -1053,7 +1053,7 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 	bc.futureBlocks.Remove(block.Hash())
 
 	// Cleanup storage
-	if !bc.cacheConfig.DBDisabledGC && bc.cleaner.NeedCleanup() {
+	if !bc.cacheConfig.DBDisabledGC.IsSet() && bc.cleaner.NeedCleanup() {
 		bc.cleaner.Cleanup()
 	}
 	return status, nil
@@ -1574,7 +1574,12 @@ func (bc *BlockChain) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscript
 	return bc.scope.Track(bc.logsFeed.Subscribe(ch))
 }
 
-// Cleanup cleanup database.
-func (bc *BlockChain) Cleanup() {
-	bc.cleaner.Cleanup()
+// EnableDBGC enable database garbage collection.
+func (bc *BlockChain) EnableDBGC() {
+	bc.cacheConfig.DBDisabledGC.Set(false)
+}
+
+// DisableDBGC disable database garbage collection.
+func (bc *BlockChain) DisableDBGC() {
+	bc.cacheConfig.DBDisabledGC.Set(true)
 }

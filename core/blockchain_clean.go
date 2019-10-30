@@ -27,10 +27,7 @@ var (
 	minCleanTimeout = time.Minute
 
 	cleanDistance uint64 = 5
-	idleState     int32  = 0
-	cleaningState int32  = 1
 	maxKeyCount   uint   = 10000000
-	stopping      int32  = 1
 )
 
 type keyCallback func([]byte)
@@ -66,8 +63,8 @@ func (cb *CleanBatch) WriteAndRest() error {
 }
 
 type Cleaner struct {
-	stopped      int32
-	cleaning     int32
+	stopped      common.AtomicBool
+	cleaning     common.AtomicBool
 	interval     uint64
 	lastNumber   uint64
 	cleanTimeout time.Duration
@@ -86,7 +83,6 @@ type Cleaner struct {
 
 func NewCleaner(blockchain *BlockChain, interval uint64, cleanTimeout time.Duration) *Cleaner {
 	c := &Cleaner{
-		stopped:      0,
 		interval:     interval,
 		lastNumber:   0,
 		cleanTimeout: cleanTimeout,
@@ -116,42 +112,46 @@ func NewCleaner(blockchain *BlockChain, interval uint64, cleanTimeout time.Durat
 }
 
 func (c *Cleaner) Stop() {
-	if atomic.LoadInt32(&c.stopped) == stopping {
+	if c.stopped.IsSet() {
 		return
 	}
 
 	c.scope.Close()
 	close(c.exit)
 
-	atomic.StoreInt32(&c.stopped, stopping)
+	c.stopped.Set(true)
 	c.wg.Wait()
 }
 
 func (c *Cleaner) Cleanup() {
-	if atomic.LoadInt32(&c.cleaning) == idleState {
-		c.cleanFeed.Send(&CleanupEvent{})
+	if c.cleaning.IsSet() {
+		return
 	}
+	c.cleaning.Set(true)
+	c.cleanFeed.Send(&CleanupEvent{})
 }
 
 func (c *Cleaner) NeedCleanup() bool {
 	lastNumber := atomic.LoadUint64(&c.lastNumber)
-	return c.blockchain.CurrentBlock().NumberU64()-lastNumber >= c.interval
+	return c.blockchain.CurrentBlock().NumberU64()-lastNumber >= c.interval && !c.cleaning.IsSet()
 }
 
 func (c *Cleaner) OnNode(key []byte) {
-	c.filterAdd(key[len(trie.MerklePrefix):])
+	if c.cleaning.IsSet() {
+		c.filterAdd(key[len(trie.MerklePrefix):])
+	}
 }
 
 func (c *Cleaner) OnPreImage(key []byte) {
-	c.filterAdd(key[len(trie.SecureKeyPrefix):])
+	if c.cleaning.IsSet() {
+		c.filterAdd(key[len(trie.SecureKeyPrefix):])
+	}
 }
 
 func (c *Cleaner) OnWrite() {
-	if atomic.LoadInt32(&c.cleaning) == idleState {
-		return
+	if c.cleaning.IsSet() {
+		c.batch.WriteAndRest()
 	}
-
-	c.batch.WriteAndRest()
 }
 
 func (c *Cleaner) loop() {
@@ -160,10 +160,7 @@ func (c *Cleaner) loop() {
 	for {
 		select {
 		case <-c.cleanCh:
-			if atomic.LoadInt32(&c.cleaning) == idleState {
-				c.wg.Add(1)
-				go c.cleanup()
-			}
+			c.cleanup()
 		case <-c.exit:
 			return
 		}
@@ -171,13 +168,7 @@ func (c *Cleaner) loop() {
 }
 
 func (c *Cleaner) cleanup() {
-	defer c.wg.Done()
-
-	if atomic.LoadInt32(&c.cleaning) == cleaningState {
-		return
-	}
-	atomic.StoreInt32(&c.cleaning, cleaningState)
-	defer atomic.StoreInt32(&c.cleaning, idleState)
+	defer c.cleaning.Set(false)
 	defer c.filterReset()
 
 	db, ok := c.blockchain.db.(*ethdb.LDBDatabase)
@@ -214,7 +205,7 @@ func (c *Cleaner) cleanup() {
 		rawdb.DeleteReceipts(db, headerByNumber.Hash(), headerByNumber.Number.Uint64())
 		receipts++
 
-		if time.Since(t) >= c.cleanTimeout || atomic.LoadInt32(&c.stopped) == stopping {
+		if time.Since(t) >= c.cleanTimeout || c.stopped.IsSet() {
 			atomic.StoreUint64(&c.lastNumber, number)
 			db.Put(lastNumberKey, common.Uint64ToBytes(number))
 			return
@@ -253,7 +244,7 @@ func (c *Cleaner) cleanup() {
 				}
 			}
 
-			if time.Since(t) >= c.cleanTimeout || atomic.LoadInt32(&c.stopped) == stopping {
+			if time.Since(t) >= c.cleanTimeout || c.stopped.IsSet() {
 				if c.batch.ValueSize() > 0 {
 					c.batch.WriteAndRest()
 				}

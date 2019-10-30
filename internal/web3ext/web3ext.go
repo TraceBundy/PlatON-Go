@@ -412,8 +412,12 @@ web3._extend({
 			call: 'debug_economicConfig',
 		}),
 		new web3._extend.Method({
-			name: 'cleanup',
-			call: 'debug_cleanup',
+			name: 'enableDBGC',
+			call: 'debug_enableDBGC',
+		}),
+		new web3._extend.Method({
+			name: 'disableDBGC',
+			call: 'debug_disableDBGC',
 		}),
 	],
 	properties: []
