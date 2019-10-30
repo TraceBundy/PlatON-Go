@@ -196,13 +196,20 @@ func (c *Cleaner) cleanup() {
 	}()
 
 	for number := lastNumber; number <= cleanPoint; number++ {
-		headerByNumber := c.blockchain.GetHeaderByNumber(number)
-		if headerByNumber == nil {
+		block := c.blockchain.GetBlockByNumber(number)
+		if block == nil {
 			log.Error("Found bad header", "number", number)
 			return
 		}
 
-		rawdb.DeleteReceipts(db, headerByNumber.Hash(), headerByNumber.Number.Uint64())
+		rawdb.DeleteReceipts(db, block.Hash(), block.NumberU64())
+
+		batch := c.blockchain.db.NewBatch()
+		for _, tx := range block.Transactions() {
+			rawdb.DeleteTxLookupEntry(batch, tx.Hash())
+		}
+		batch.Write()
+
 		receipts++
 
 		if time.Since(t) >= c.cleanTimeout || c.stopped.IsSet() {
@@ -292,6 +299,8 @@ func (c *Cleaner) filterReset() {
 }
 
 func ScanStateTrie(root common.Hash, db *trie.Database, onNode keyCallback, onValue keyCallback, onPreImage keyCallback) error {
+	var accounts int = 0
+	var nodes int = 0
 	var stateTrie *trie.SecureTrie
 	var err error
 	if stateTrie, err = trie.NewSecure(root, db, 0); err != nil {
@@ -299,6 +308,7 @@ func ScanStateTrie(root common.Hash, db *trie.Database, onNode keyCallback, onVa
 	}
 	iter := stateTrie.NodeIterator(nil)
 	for iter.Next(true) {
+		nodes++
 		if iter.Hash() != (common.Hash{}) {
 			onNode(iter.Hash().Bytes())
 		}
@@ -311,6 +321,7 @@ func ScanStateTrie(root common.Hash, db *trie.Database, onNode keyCallback, onVa
 			}
 
 			if account.Root != emptyState {
+				accounts++
 				if err := ScanAccountTrie(account.Root, db, onNode, onValue, onPreImage); err != nil {
 					return fmt.Errorf("scan account trie failed :%v", err)
 				}
@@ -320,6 +331,7 @@ func ScanStateTrie(root common.Hash, db *trie.Database, onNode keyCallback, onVa
 	if iter.Error() != nil {
 		return iter.Error()
 	}
+	log.Debug("Scan state tries", "root", root.String(), "nodes", nodes, "accounts", accounts)
 	return nil
 }
 
