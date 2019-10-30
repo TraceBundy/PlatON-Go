@@ -60,6 +60,10 @@ type CacheConfig struct {
 	MaxFutureBlocks int
 	BadBlockLimit   int
 	TriesInMemory   int
+
+	DBDisabledGC common.AtomicBool // Whether to disable database garbage collection
+	DBGCInterval uint64            // Block interval for database garbage collection
+	DBGCTimeout  time.Duration
 }
 
 // mining related configuration
@@ -136,6 +140,8 @@ type BlockChain struct {
 
 	badBlocks      *lru.Cache              // Bad block cache
 	shouldPreserve func(*types.Block) bool // Function used to determine whether should preserve the given block.
+
+	cleaner *Cleaner
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -151,6 +157,8 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 			MaxFutureBlocks: 256,
 			BadBlockLimit:   10,
 			TriesInMemory:   128,
+			DBGCInterval:    86400,
+			DBGCTimeout:     time.Minute,
 		}
 	}
 	bodyCache, _ := lru.New(cacheConfig.BodyCacheLimit)
@@ -203,6 +211,10 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 			}
 		}
 	}
+
+	log.Debug("DB config", "DBDisabledGC", bc.cacheConfig.DBDisabledGC, "DBGCInterval", bc.cacheConfig.DBGCInterval, "DBGCTimeout", bc.cacheConfig.DBGCTimeout)
+	bc.cleaner = NewCleaner(bc, bc.cacheConfig.DBGCInterval, bc.cacheConfig.DBGCTimeout)
+
 	// Take ownership of this particular state
 	go bc.update()
 	return bc, nil
@@ -667,6 +679,8 @@ func (bc *BlockChain) Stop() {
 	close(bc.quit)
 	atomic.StoreInt32(&bc.procInterrupt, 1)
 
+	bc.cleaner.Stop()
+
 	bc.wg.Wait()
 
 	// Ensure the state of a recent block is also stored to disk before exiting.
@@ -685,7 +699,7 @@ func (bc *BlockChain) Stop() {
 				recent := bc.GetBlockByNumber(number - offset)
 
 				log.Info("Writing cached state to disk", "block", recent.Number(), "hash", recent.Hash(), "root", recent.Root())
-				if err := triedb.Commit(recent.Root(), true, nil); err != nil {
+				if err := triedb.Commit(recent.Root(), true, bc.cleaner); err != nil {
 					log.Error("Failed to commit recent state trie", "err", err)
 				}
 			}
@@ -920,7 +934,7 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 
 	// If we're running an archive node, always flush
 	if bc.cacheConfig.Disabled {
-		if err := triedb.Commit(root, false, nil); err != nil {
+		if err := triedb.Commit(root, false, bc.cleaner); err != nil {
 			log.Error("Commit to triedb error", "root", root)
 			return NonStatTy, err
 		}
@@ -957,7 +971,7 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 						float64(chosen-lastWrite)/(float64)(bc.cacheConfig.TriesInMemory))
 				}
 				// Flush an entire trie and restart the counters
-				triedb.Commit(header.Root, true, nil)
+				triedb.Commit(header.Root, true, bc.cleaner)
 				lastWrite = chosen
 				bc.gcproc = 0
 			}
@@ -1037,6 +1051,11 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 
 	}
 	bc.futureBlocks.Remove(block.Hash())
+
+	// Cleanup storage
+	if !bc.cacheConfig.DBDisabledGC.IsSet() && bc.cleaner.NeedCleanup() {
+		bc.cleaner.Cleanup()
+	}
 	return status, nil
 }
 
@@ -1553,4 +1572,14 @@ func (bc *BlockChain) SubscribeChainSideEvent(ch chan<- ChainSideEvent) event.Su
 // SubscribeLogsEvent registers a subscription of []*types.Log.
 func (bc *BlockChain) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscription {
 	return bc.scope.Track(bc.logsFeed.Subscribe(ch))
+}
+
+// EnableDBGC enable database garbage collection.
+func (bc *BlockChain) EnableDBGC() {
+	bc.cacheConfig.DBDisabledGC.Set(false)
+}
+
+// DisableDBGC disable database garbage collection.
+func (bc *BlockChain) DisableDBGC() {
+	bc.cacheConfig.DBDisabledGC.Set(true)
 }
