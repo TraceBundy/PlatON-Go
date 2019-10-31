@@ -26,7 +26,7 @@ var (
 
 	minCleanTimeout = time.Minute
 
-	cleanDistance uint64 = 5
+	cleanDistance uint64 = 1
 	maxKeyCount   uint   = 10000000
 )
 
@@ -195,7 +195,7 @@ func (c *Cleaner) cleanup() {
 		log.Info("Finish cleanup database", "lastNumber", atomic.LoadUint64(&c.lastNumber), "receipts", receipts, "keys", keys, "elapsed", time.Since(t))
 	}()
 
-	for number := lastNumber; number <= cleanPoint; number++ {
+	for number := lastNumber + 1; number <= cleanPoint; number++ {
 		block := c.blockchain.GetBlockByNumber(number)
 		if block == nil {
 			log.Error("Found bad header", "number", number)
@@ -282,7 +282,11 @@ func (c *Cleaner) filterAdd(key []byte) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
+	t := time.Now()
 	c.filter.Add(key)
+	if time.Since(t) >= 100*time.Millisecond {
+		log.Warn("Filter add use too much time", "elapsed", time.Since(t))
+	}
 }
 
 func (c *Cleaner) filterTest(key []byte) bool {
@@ -299,6 +303,7 @@ func (c *Cleaner) filterReset() {
 }
 
 func ScanStateTrie(root common.Hash, db *trie.Database, onNode keyCallback, onValue keyCallback, onPreImage keyCallback) error {
+	t := time.Now()
 	var accounts int = 0
 	var nodes int = 0
 	var stateTrie *trie.SecureTrie
@@ -331,7 +336,7 @@ func ScanStateTrie(root common.Hash, db *trie.Database, onNode keyCallback, onVa
 	if iter.Error() != nil {
 		return iter.Error()
 	}
-	log.Debug("Scan state tries", "root", root.String(), "nodes", nodes, "accounts", accounts)
+	log.Info("Scan state tries", "root", root.String(), "nodes", nodes, "accounts", accounts, "elapsed", time.Since(t))
 	return nil
 }
 
