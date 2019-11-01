@@ -68,6 +68,7 @@ type Cleaner struct {
 	interval     uint64
 	lastNumber   uint64
 	cleanTimeout time.Duration
+	gcMpt        bool
 
 	wg        sync.WaitGroup
 	exit      chan struct{}
@@ -82,11 +83,12 @@ type Cleaner struct {
 	blockchain  *BlockChain
 }
 
-func NewCleaner(blockchain *BlockChain, interval uint64, cleanTimeout time.Duration) *Cleaner {
+func NewCleaner(blockchain *BlockChain, interval uint64, cleanTimeout time.Duration, gcMpt bool) *Cleaner {
 	c := &Cleaner{
 		interval:     interval,
 		lastNumber:   0,
 		cleanTimeout: cleanTimeout,
+		gcMpt:        gcMpt,
 		exit:         make(chan struct{}),
 		cleanCh:      make(chan *CleanupEvent, 1),
 		batch: CleanBatch{
@@ -135,7 +137,7 @@ func (c *Cleaner) Cleanup() {
 
 func (c *Cleaner) NeedCleanup() bool {
 	lastNumber := atomic.LoadUint64(&c.lastNumber)
-	return c.blockchain.CurrentBlock().NumberU64()-lastNumber >= c.interval && !c.cleaning.IsSet()
+	return c.blockchain.CurrentBlock().NumberU64()-lastNumber >= 2*c.interval && !c.cleaning.IsSet()
 }
 
 func (c *Cleaner) OnNode(key []byte) {
@@ -189,48 +191,52 @@ func (c *Cleaner) cleanup() {
 
 	var (
 		receipts = 0
+		txs      = 0
 		keys     = 0
 	)
 
 	t := time.Now()
-	log.Info("Start cleanup database", "interval", c.interval, "cleanTimeout", c.cleanTimeout, "lastNumber", atomic.LoadUint64(&c.lastNumber), "number", currentBlock.NumberU64(), "hash", currentBlock.Hash())
+	log.Info("Start cleanup database", "interval", c.interval, "cleanTimeout", c.cleanTimeout, "gcMpt", c.gcMpt, "lastNumber", atomic.LoadUint64(&c.lastNumber), "number", currentBlock.NumberU64(), "hash", currentBlock.Hash())
 	defer func() {
-		log.Info("Finish cleanup database", "lastNumber", atomic.LoadUint64(&c.lastNumber), "receipts", receipts, "keys", keys, "elapsed", time.Since(t))
+		log.Info("Finish cleanup database", "lastNumber", atomic.LoadUint64(&c.lastNumber), "receipts", receipts, "txs", txs, "keys", keys, "elapsed", time.Since(t))
 	}()
 
-	for number := lastNumber + 1; number <= cleanPoint; number++ {
-		block := c.blockchain.GetBlockByNumber(number)
-		if block == nil {
-			log.Error("Found bad header", "number", number)
-			return
+	if currentBlock.NumberU64()-c.lastNumber >= 2*c.interval {
+		number := lastNumber + 1
+		for ; number <= currentBlock.NumberU64()-c.interval; number++ {
+			block := c.blockchain.GetBlockByNumber(number)
+			if block == nil {
+				log.Error("Found bad header", "number", number)
+				return
+			}
+
+			rawdb.DeleteReceipts(db, block.Hash(), block.NumberU64())
+
+			batch := c.blockchain.db.NewBatch()
+			for _, tx := range block.Transactions() {
+				txs++
+				rawdb.DeleteTxLookupEntry(batch, tx.Hash())
+			}
+			batch.Write()
+
+			receipts++
+
+			if time.Since(t) >= c.cleanTimeout || c.stopped.IsSet() {
+				atomic.StoreUint64(&c.lastNumber, number)
+				db.Put(lastNumberKey, common.Uint64ToBytes(number))
+				return
+			}
 		}
-
-		rawdb.DeleteReceipts(db, block.Hash(), block.NumberU64())
-
-		batch := c.blockchain.db.NewBatch()
-		for _, tx := range block.Transactions() {
-			rawdb.DeleteTxLookupEntry(batch, tx.Hash())
-		}
-		batch.Write()
-
-		receipts++
-
-		if time.Since(t) >= c.cleanTimeout || c.stopped.IsSet() {
-			atomic.StoreUint64(&c.lastNumber, number)
-			db.Put(lastNumberKey, common.Uint64ToBytes(number))
-			return
-		}
+		atomic.StoreUint64(&c.lastNumber, number-1)
+		db.Put(lastNumberKey, common.Uint64ToBytes(number-1))
 	}
-	atomic.StoreUint64(&c.lastNumber, cleanPoint)
-	db.Put(lastNumberKey, common.Uint64ToBytes(cleanPoint))
 
-	t0 := time.Now()
+	if !c.gcMpt {
+		return
+	}
+
 	filterFn := func(key []byte) {
 		c.scanFilter.Add(key)
-		if time.Since(t0) >= 100 * time.Millisecond {
-			log.Info("Scan filter add", "duration", time.Since(t0))
-		}
-		t0 = time.Now()
 	}
 
 	for number := cleanPoint + 1; number <= currentBlock.NumberU64(); number++ {

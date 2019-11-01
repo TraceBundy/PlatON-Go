@@ -595,9 +595,9 @@ var (
 		Value: "60",
 	}
 
-	DBDisabledGCFlag = cli.BoolFlag{
-		Name:  "db.disabled_gc",
-		Usage: "Disabled database garbage collection",
+	DBNoGCFlag = cli.BoolFlag{
+		Name:  "db.nogc",
+		Usage: "Disables database garbage collection",
 	}
 	DBGCIntervalFlag = cli.Uint64Flag{
 		Name:  "db.gc_interval",
@@ -608,6 +608,10 @@ var (
 		Name:  "db.gc_timeout",
 		Usage: "Maximum time for database garbage collection",
 		Value: eth.DefaultConfig.DBGCTimeout,
+	}
+	DBGCMptFlag = cli.BoolFlag{
+		Name:  "db.gc_mpt",
+		Usage: "Enables database garbage collection MPT",
 	}
 )
 
@@ -1180,14 +1184,17 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 		state.MaxTrieCacheGen = uint16(gen)
 	}
 
-	if ctx.GlobalIsSet(DBDisabledGCFlag.Name) {
-		cfg.DBDisabledGC = ctx.GlobalBool(DBDisabledGCFlag.Name)
+	if ctx.GlobalIsSet(DBNoGCFlag.Name) {
+		cfg.DBDisabledGC = ctx.GlobalBool(DBNoGCFlag.Name)
 	}
 	if ctx.GlobalIsSet(DBGCIntervalFlag.Name) {
 		cfg.DBGCInterval = ctx.GlobalUint64(DBGCIntervalFlag.Name)
 	}
 	if ctx.GlobalIsSet(DBGCTimeoutFlag.Name) {
 		cfg.DBGCTimeout = ctx.GlobalDuration(DBGCTimeoutFlag.Name)
+	}
+	if ctx.GlobalIsSet(DBGCMptFlag.Name) {
+		cfg.DBGCMpt = ctx.GlobalBool(DBGCMptFlag.Name)
 	}
 }
 

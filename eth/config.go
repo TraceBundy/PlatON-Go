@@ -127,6 +127,7 @@ type Config struct {
 	DBDisabledGC bool
 	DBGCInterval uint64
 	DBGCTimeout  time.Duration
+	DBGCMpt bool
 
 	// Mining-related options
 	MinerExtraData []byte `toml:",omitempty"`

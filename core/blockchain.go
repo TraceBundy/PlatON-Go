@@ -64,6 +64,7 @@ type CacheConfig struct {
 	DBDisabledGC common.AtomicBool // Whether to disable database garbage collection
 	DBGCInterval uint64            // Block interval for database garbage collection
 	DBGCTimeout  time.Duration
+	DBGCMpt bool
 }
 
 // mining related configuration
@@ -213,7 +214,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	}
 
 	log.Debug("DB config", "DBDisabledGC", bc.cacheConfig.DBDisabledGC, "DBGCInterval", bc.cacheConfig.DBGCInterval, "DBGCTimeout", bc.cacheConfig.DBGCTimeout)
-	bc.cleaner = NewCleaner(bc, bc.cacheConfig.DBGCInterval, bc.cacheConfig.DBGCTimeout)
+	bc.cleaner = NewCleaner(bc, bc.cacheConfig.DBGCInterval, bc.cacheConfig.DBGCTimeout, bc.cacheConfig.DBGCMpt)
 
 	// Take ownership of this particular state
 	go bc.update()
