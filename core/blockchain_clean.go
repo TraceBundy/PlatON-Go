@@ -75,10 +75,11 @@ type Cleaner struct {
 	scope     event.SubscriptionScope
 	cleanCh   chan *CleanupEvent
 
-	batch      CleanBatch
-	lock       sync.RWMutex
-	filter     *bloom.BloomFilter
-	blockchain *BlockChain
+	batch       CleanBatch
+	lock        sync.RWMutex
+	scanFilter  *bloom.BloomFilter
+	writeFilter *bloom.BloomFilter
+	blockchain  *BlockChain
 }
 
 func NewCleaner(blockchain *BlockChain, interval uint64, cleanTimeout time.Duration) *Cleaner {
@@ -91,8 +92,9 @@ func NewCleaner(blockchain *BlockChain, interval uint64, cleanTimeout time.Durat
 		batch: CleanBatch{
 			batch: blockchain.db.NewBatch(),
 		},
-		filter:     bloom.NewWithEstimates(maxKeyCount, 0.01),
-		blockchain: blockchain,
+		scanFilter:  bloom.NewWithEstimates(maxKeyCount, 0.01),
+		writeFilter: bloom.NewWithEstimates(maxKeyCount, 0.01),
+		blockchain:  blockchain,
 	}
 
 	if c.cleanTimeout < minCleanTimeout {
@@ -138,13 +140,13 @@ func (c *Cleaner) NeedCleanup() bool {
 
 func (c *Cleaner) OnNode(key []byte) {
 	if c.cleaning.IsSet() {
-		c.filterAdd(key[len(trie.MerklePrefix):])
+		c.writeFilterAdd(key[len(trie.MerklePrefix):])
 	}
 }
 
 func (c *Cleaner) OnPreImage(key []byte) {
 	if c.cleaning.IsSet() {
-		c.filterAdd(key[len(trie.SecureKeyPrefix):])
+		c.writeFilterAdd(key[len(trie.SecureKeyPrefix):])
 	}
 }
 
@@ -169,7 +171,8 @@ func (c *Cleaner) loop() {
 
 func (c *Cleaner) cleanup() {
 	defer c.cleaning.Set(false)
-	defer c.filterReset()
+	defer c.writeFilterReset()
+	defer c.scanFilter.ClearAll()
 
 	db, ok := c.blockchain.db.(*ethdb.LDBDatabase)
 	if !ok {
@@ -221,8 +224,13 @@ func (c *Cleaner) cleanup() {
 	atomic.StoreUint64(&c.lastNumber, cleanPoint)
 	db.Put(lastNumberKey, common.Uint64ToBytes(cleanPoint))
 
+	t0 := time.Now()
 	filterFn := func(key []byte) {
-		c.filterAdd(key)
+		c.scanFilter.Add(key)
+		if time.Since(t0) >= 100 * time.Millisecond {
+			log.Info("Scan filter add", "duration", time.Since(t0))
+		}
+		t0 = time.Now()
 	}
 
 	for number := cleanPoint + 1; number <= currentBlock.NumberU64(); number++ {
@@ -239,7 +247,7 @@ func (c *Cleaner) cleanup() {
 
 	iterateOver := func(iter ethdb.Iterator, prefix []byte) (bool, error) {
 		for iter.Next() {
-			if !c.filterTest(iter.Key()[len(prefix):]) {
+			if !c.writeFilterTest(iter.Key()[len(prefix):]) && !c.scanFilter.Test(iter.Key()[len(prefix):]) {
 				c.batch.Delete(iter.Key())
 				keys++
 			}
@@ -264,12 +272,14 @@ func (c *Cleaner) cleanup() {
 
 	iter := db.NewIteratorWithPrefix(trie.MerklePrefix)
 	timeout, err := iterateOver(iter, trie.MerklePrefix)
+	iter.Release()
 	if timeout || err != nil {
 		return
 	}
 
 	iter = db.NewIteratorWithPrefix(trie.SecureKeyPrefix)
 	timeout, err = iterateOver(iter, trie.SecureKeyPrefix)
+	iter.Release()
 	if timeout || err != nil {
 		return
 	}
@@ -278,28 +288,28 @@ func (c *Cleaner) cleanup() {
 	}
 }
 
-func (c *Cleaner) filterAdd(key []byte) {
+func (c *Cleaner) writeFilterAdd(key []byte) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
 	t := time.Now()
-	c.filter.Add(key)
+	c.writeFilter.Add(key)
 	if time.Since(t) >= 100*time.Millisecond {
 		log.Warn("Filter add use too much time", "elapsed", time.Since(t))
 	}
 }
 
-func (c *Cleaner) filterTest(key []byte) bool {
+func (c *Cleaner) writeFilterTest(key []byte) bool {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
-	return c.filter.Test(key)
+	return c.writeFilter.Test(key)
 }
 
-func (c *Cleaner) filterReset() {
+func (c *Cleaner) writeFilterReset() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	c.filter.ClearAll()
+	c.writeFilter.ClearAll()
 }
 
 func ScanStateTrie(root common.Hash, db *trie.Database, onNode keyCallback, onValue keyCallback, onPreImage keyCallback) error {
