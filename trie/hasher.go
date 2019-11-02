@@ -188,6 +188,7 @@ func (h *hasher) store(n node, db *Database, force bool) (node, error) {
 
 		db.lock.Lock()
 		db.insert(hash, h.tmp, n)
+		db.insertFreshNode(hash)
 		db.lock.Unlock()
 
 		// Track external references from account->storage trie

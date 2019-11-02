@@ -64,7 +64,7 @@ type CacheConfig struct {
 	DBDisabledGC common.AtomicBool // Whether to disable database garbage collection
 	DBGCInterval uint64            // Block interval for database garbage collection
 	DBGCTimeout  time.Duration
-	DBGCMpt bool
+	DBGCMpt      bool
 }
 
 // mining related configuration
@@ -935,12 +935,19 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 
 	// If we're running an archive node, always flush
 	if bc.cacheConfig.Disabled {
-		triedb.Reference(root, common.Hash{})
-		if err := triedb.Commit(root, false, false); err != nil {
-			log.Error("Commit to triedb error", "root", root)
-			return NonStatTy, err
+		if !bc.cacheConfig.DBGCMpt {
+			if err := triedb.Commit(root, false, true); err != nil {
+				log.Error("Commit to triedb error", "root", root)
+				return NonStatTy, err
+			}
+		} else {
+			triedb.Reference(root, common.Hash{})
+			if err := triedb.Commit(root, false, false); err != nil {
+				log.Error("Commit to triedb error", "root", root)
+				return NonStatTy, err
+			}
+			triedb.DereferenceDB(currentBlock.Root())
 		}
-		triedb.DereferenceDB(currentBlock.Root())
 		log.Debug("archive node commit stateDB trie", "blockNumber", block.NumberU64(), "blockHash", block.Hash().Hex(), "root", root.String())
 	} else {
 		log.Debug("non-archive node put stateDB trie", "blockNumber", block.NumberU64(), "blockHash", block.Hash().Hex(), "root", root.String())

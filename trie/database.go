@@ -65,9 +65,10 @@ type DatabaseReader interface {
 type Database struct {
 	diskdb ethdb.Database // Persistent storage for matured trie nodes
 
-	nodes  map[common.Hash]*cachedNode // Data and references relationships of a node
-	oldest common.Hash                 // Oldest tracked node, flush-list head
-	newest common.Hash                 // Newest tracked node, flush-list tail
+	freshNodes map[common.Hash]struct{}
+	nodes      map[common.Hash]*cachedNode // Data and references relationships of a node
+	oldest     common.Hash                 // Oldest tracked node, flush-list head
+	newest     common.Hash                 // Newest tracked node, flush-list tail
 
 	preimages map[common.Hash][]byte // Preimages of nodes from the secure trie
 	seckeybuf [secureKeyLength]byte  // Ephemeral buffer for calculating preimage keys
@@ -269,9 +270,10 @@ func expandNode(hash hashNode, n node, cachegen uint16) node {
 // its written out to disk or garbage collected.
 func NewDatabase(diskdb ethdb.Database) *Database {
 	return &Database{
-		diskdb:    diskdb,
-		nodes:     map[common.Hash]*cachedNode{{}: {}},
-		preimages: make(map[common.Hash][]byte),
+		diskdb:     diskdb,
+		freshNodes: make(map[common.Hash]struct{}),
+		nodes:      map[common.Hash]*cachedNode{{}: {}},
+		preimages:  make(map[common.Hash][]byte),
 	}
 }
 
@@ -289,6 +291,13 @@ func (db *Database) InsertBlob(hash common.Hash, blob []byte) {
 	defer db.lock.Unlock()
 
 	db.insert(hash, blob, rawNode(blob))
+}
+
+func (db *Database) insertFreshNode(hash common.Hash) {
+	db.freshNodes[hash] = struct{}{}
+}
+func (db *Database) resetFreshNode() {
+	db.freshNodes = make(map[common.Hash]struct{})
 }
 
 // insert inserts a collapsed trie node into the memory database. This method is
@@ -697,6 +706,7 @@ func (db *Database) Commit(node common.Hash, report bool, uncache bool) error {
 	if uncache {
 		db.uncache(node)
 	}
+	db.resetFreshNode()
 
 	memcacheCommitTimeTimer.Update(time.Since(start))
 	memcacheCommitSizeMeter.Mark(int64(storage - db.nodesSize))
@@ -719,10 +729,11 @@ func (db *Database) Commit(node common.Hash, report bool, uncache bool) error {
 // commit is the private locked version of Commit.
 func (db *Database) commit(hash common.Hash, batch ethdb.Batch) error {
 	// If the node does not exist, it's a previously committed node
-	node, ok := db.nodes[hash]
+	_, ok := db.freshNodes[hash]
 	if !ok {
 		return nil
 	}
+	node, _ := db.nodes[hash]
 	for _, child := range node.childs() {
 		if err := db.commit(child, batch); err != nil {
 			return err
