@@ -555,6 +555,45 @@ func (db *Database) dereference(child common.Hash, parent common.Hash, clearFn f
 	}
 }
 
+func (db *Database) CapNode(limit common.StorageSize) {
+	db.lock.RLock()
+	nodes, storage, start := len(db.nodes), db.nodesSize, time.Now()
+	size := db.nodesSize + common.StorageSize((len(db.nodes)-1)*2*common.HashLength)
+
+	oldest := db.oldest
+	for size > limit && oldest != (common.Hash{}) {
+		// Fetch the oldest referenced node and push into the batch
+		node := db.nodes[oldest]
+		// Iterate to the next flush item, or abort if the size cap was achieved. Size
+		// is the total size, including both the useful cached data (hash -> blob), as
+		// well as the flushlist metadata (2*hash). When flushing items from the cache,
+		// we need to reduce both.
+		size -= common.StorageSize(3*common.HashLength + int(node.size))
+		oldest = node.flushNext
+	}
+	db.lock.RUnlock()
+
+	db.lock.Lock()
+	defer db.lock.Unlock()
+	for db.oldest != oldest {
+		node := db.nodes[db.oldest]
+		delete(db.nodes, db.oldest)
+		db.oldest = node.flushNext
+
+		db.nodesSize -= common.StorageSize(common.HashLength + int(node.size))
+	}
+	db.flushnodes += uint64(nodes - len(db.nodes))
+	db.flushsize += storage - db.nodesSize
+	db.flushtime += time.Since(start)
+
+	memcacheFlushTimeTimer.Update(time.Since(start))
+	memcacheFlushSizeMeter.Mark(int64(storage - db.nodesSize))
+	memcacheFlushNodesMeter.Mark(int64(nodes - len(db.nodes)))
+
+	log.Debug("Persisted nodes from memory database", "nodes", nodes-len(db.nodes), "size", storage-db.nodesSize, "time", time.Since(start),
+		"flushnodes", db.flushnodes, "flushsize", db.flushsize, "flushtime", db.flushtime, "livenodes", len(db.nodes), "livesize", db.nodesSize)
+}
+
 // Cap iteratively flushes old but still referenced trie nodes until the total
 // memory usage goes below the given threshold.
 func (db *Database) Cap(limit common.StorageSize) error {

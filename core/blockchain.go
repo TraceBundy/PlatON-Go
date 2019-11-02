@@ -947,6 +947,13 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 				return NonStatTy, err
 			}
 			triedb.DereferenceDB(currentBlock.Root())
+			var (
+				nodes, _ = triedb.Size()
+				limit    = common.StorageSize(bc.cacheConfig.TrieNodeLimit) * 1024 * 1024
+			)
+			if nodes > limit {
+				triedb.CapNode(limit - ethdb.IdealBatchSize)
+			}
 		}
 		log.Debug("archive node commit stateDB trie", "blockNumber", block.NumberU64(), "blockHash", block.Hash().Hex(), "root", root.String())
 	} else {
