@@ -167,9 +167,10 @@ var (
 	}
 
 	dbFlags = []cli.Flag{
-		utils.DBDisabledGCFlag,
+		utils.DBNoGCFlag,
 		utils.DBGCIntervalFlag,
 		utils.DBGCTimeoutFlag,
+		utils.DBGCMptFlag,
 	}
 )
 

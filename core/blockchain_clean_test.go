@@ -154,38 +154,40 @@ func TestCleaner(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, blockchain)
 
-	cleaner := NewCleaner(blockchain, 100, time.Minute)
+	cleaner := NewCleaner(blockchain, 100, time.Minute, false)
 	cleaner.lastNumber = 0
 	assert.NotNil(t, cleaner)
 	assert.True(t, cleaner.NeedCleanup())
 	cleaner.interval = 200
-	assert.True(t, cleaner.NeedCleanup())
-	cleaner.interval = 201
 	assert.False(t, cleaner.NeedCleanup())
 
 	cleaner.lastNumber = 0
+	cleaner.interval = 100
 	cleaner.cleanTimeout = time.Nanosecond
 	cleaner.Cleanup()
 	time.Sleep(100 * time.Millisecond)
-	assert.True(t, cleaner.lastNumber == 0)
+	fmt.Println(cleaner.lastNumber)
+	assert.True(t, cleaner.lastNumber == 1)
 
+	cleaner.lastNumber = 0
 	cleaner.cleanTimeout = time.Minute
-	cleaner.interval = 200
 	cleaner.Cleanup()
 	assert.True(t, cleaner.cleaning.IsSet())
 	time.Sleep(500 * time.Millisecond) // Waiting cleanup finish
-	assert.True(t, cleaner.lastNumber == 195)
+	assert.True(t, cleaner.lastNumber == 100)
 	assert.False(t, cleaner.cleaning.IsSet())
 
+	cleaner.gcMpt = true
+	cleaner.lastNumber = 0
 	cleaner.Cleanup()
 	time.Sleep(50 * time.Millisecond)
-	assert.True(t, cleaner.lastNumber == 195)
+	assert.True(t, cleaner.lastNumber == 100)
 
 	block := blockchain.GetBlockByNumber(188)
 	_, err = blockchain.StateAt(block.Root())
 	assert.NotNil(t, err)
 
-	block = blockchain.GetBlockByNumber(196)
+	block = blockchain.GetBlockByNumber(200)
 	statedb, _ := blockchain.StateAt(block.Root())
 	assert.NotNil(t, statedb)
 	buf := statedb.GetState(testAddress, []byte(fmt.Sprintf("abc_%d", block.NumberU64())))
@@ -193,8 +195,8 @@ func TestCleaner(t *testing.T) {
 
 	cleaner.Stop()
 
-	cleaner = NewCleaner(blockchain, 200, time.Minute)
-	assert.Equal(t, cleaner.lastNumber, uint64(195))
+	cleaner = NewCleaner(blockchain, 200, time.Minute, false)
+	assert.Equal(t, cleaner.lastNumber, uint64(100))
 }
 
 func TestStopCleaner(t *testing.T) {
@@ -207,14 +209,12 @@ func TestStopCleaner(t *testing.T) {
 	blockchain, err := newBlockChainForTesting(db)
 	assert.Nil(t, err)
 
-	cleaner := NewCleaner(blockchain, 100, time.Minute)
+	cleaner := NewCleaner(blockchain, 100, time.Minute, false)
 	assert.False(t, cleaner.stopped.IsSet())
 	cleaner.Cleanup()
 	time.Sleep(time.Millisecond)
 	cleaner.Stop()
 	assert.True(t, cleaner.stopped.IsSet())
-	fmt.Println(cleaner.lastNumber)
-	assert.True(t, cleaner.lastNumber < 195)
 }
 
 func TestFilter(t *testing.T) {
@@ -227,17 +227,17 @@ func TestFilter(t *testing.T) {
 	blockchain, err := newBlockChainForTesting(db)
 	assert.Nil(t, err)
 
-	cleaner := NewCleaner(blockchain, 100, time.Minute)
+	cleaner := NewCleaner(blockchain, 100, time.Minute, false)
 	cleaner.OnNode([]byte("m-abc"))
 	cleaner.OnPreImage([]byte("secure-key-abcde"))
 
-	assert.False(t, cleaner.filterTest([]byte("abc")))
-	assert.False(t, cleaner.filterTest([]byte("abcde")))
-	assert.False(t, cleaner.filterTest([]byte("123")))
+	assert.False(t, cleaner.writeFilterTest([]byte("abc")))
+	assert.False(t, cleaner.writeFilterTest([]byte("abcde")))
+	assert.False(t, cleaner.writeFilterTest([]byte("123")))
 
 	cleaner.cleaning.Set(true)
 	cleaner.OnNode([]byte("m-abc"))
 	cleaner.OnPreImage([]byte("secure-key-abcde"))
-	assert.True(t, cleaner.filterTest([]byte("abc")))
-	assert.True(t, cleaner.filterTest([]byte("abcde")))
+	assert.True(t, cleaner.writeFilterTest([]byte("abc")))
+	assert.True(t, cleaner.writeFilterTest([]byte("abcde")))
 }

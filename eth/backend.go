@@ -171,6 +171,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 			BodyCacheLimit: config.BodyCacheLimit, BlockCacheLimit: config.BlockCacheLimit,
 			MaxFutureBlocks: config.MaxFutureBlocks, BadBlockLimit: config.BadBlockLimit,
 			TriesInMemory: config.TriesInMemory, DBGCInterval: config.DBGCInterval, DBGCTimeout: config.DBGCTimeout,
+			DBGCMpt: config.DBGCMpt,
 		}
 
 		minningConfig = &core.MiningConfig{MiningLogAtDepth: config.MiningLogAtDepth, TxChanSize: config.TxChanSize,

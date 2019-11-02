@@ -26,7 +26,7 @@ var (
 
 	minCleanTimeout = time.Minute
 
-	cleanDistance uint64 = 5
+	cleanDistance uint64 = 1
 	maxKeyCount   uint   = 10000000
 )
 
@@ -68,6 +68,7 @@ type Cleaner struct {
 	interval     uint64
 	lastNumber   uint64
 	cleanTimeout time.Duration
+	gcMpt        bool
 
 	wg        sync.WaitGroup
 	exit      chan struct{}
@@ -75,24 +76,27 @@ type Cleaner struct {
 	scope     event.SubscriptionScope
 	cleanCh   chan *CleanupEvent
 
-	batch      CleanBatch
-	lock       sync.RWMutex
-	filter     *bloom.BloomFilter
-	blockchain *BlockChain
+	batch       CleanBatch
+	lock        sync.RWMutex
+	scanFilter  *bloom.BloomFilter
+	writeFilter *bloom.BloomFilter
+	blockchain  *BlockChain
 }
 
-func NewCleaner(blockchain *BlockChain, interval uint64, cleanTimeout time.Duration) *Cleaner {
+func NewCleaner(blockchain *BlockChain, interval uint64, cleanTimeout time.Duration, gcMpt bool) *Cleaner {
 	c := &Cleaner{
 		interval:     interval,
 		lastNumber:   0,
 		cleanTimeout: cleanTimeout,
+		gcMpt:        gcMpt,
 		exit:         make(chan struct{}),
 		cleanCh:      make(chan *CleanupEvent, 1),
 		batch: CleanBatch{
 			batch: blockchain.db.NewBatch(),
 		},
-		filter:     bloom.NewWithEstimates(maxKeyCount, 0.01),
-		blockchain: blockchain,
+		scanFilter:  bloom.NewWithEstimates(maxKeyCount, 0.01),
+		writeFilter: bloom.NewWithEstimates(maxKeyCount, 0.01),
+		blockchain:  blockchain,
 	}
 
 	if c.cleanTimeout < minCleanTimeout {
@@ -133,18 +137,18 @@ func (c *Cleaner) Cleanup() {
 
 func (c *Cleaner) NeedCleanup() bool {
 	lastNumber := atomic.LoadUint64(&c.lastNumber)
-	return c.blockchain.CurrentBlock().NumberU64()-lastNumber >= c.interval && !c.cleaning.IsSet()
+	return c.blockchain.CurrentBlock().NumberU64()-lastNumber >= 2*c.interval && !c.cleaning.IsSet()
 }
 
 func (c *Cleaner) OnNode(key []byte) {
 	if c.cleaning.IsSet() {
-		c.filterAdd(key[len(trie.MerklePrefix):])
+		c.writeFilterAdd(key[len(trie.MerklePrefix):])
 	}
 }
 
 func (c *Cleaner) OnPreImage(key []byte) {
 	if c.cleaning.IsSet() {
-		c.filterAdd(key[len(trie.SecureKeyPrefix):])
+		c.writeFilterAdd(key[len(trie.SecureKeyPrefix):])
 	}
 }
 
@@ -169,7 +173,8 @@ func (c *Cleaner) loop() {
 
 func (c *Cleaner) cleanup() {
 	defer c.cleaning.Set(false)
-	defer c.filterReset()
+	defer c.writeFilterReset()
+	defer c.scanFilter.ClearAll()
 
 	db, ok := c.blockchain.db.(*ethdb.LDBDatabase)
 	if !ok {
@@ -186,43 +191,52 @@ func (c *Cleaner) cleanup() {
 
 	var (
 		receipts = 0
+		txs      = 0
 		keys     = 0
 	)
 
 	t := time.Now()
-	log.Info("Start cleanup database", "interval", c.interval, "cleanTimeout", c.cleanTimeout, "lastNumber", atomic.LoadUint64(&c.lastNumber), "number", currentBlock.NumberU64(), "hash", currentBlock.Hash())
+	log.Info("Start cleanup database", "interval", c.interval, "cleanTimeout", c.cleanTimeout, "gcMpt", c.gcMpt, "lastNumber", atomic.LoadUint64(&c.lastNumber), "number", currentBlock.NumberU64(), "hash", currentBlock.Hash())
 	defer func() {
-		log.Info("Finish cleanup database", "lastNumber", atomic.LoadUint64(&c.lastNumber), "receipts", receipts, "keys", keys, "elapsed", time.Since(t))
+		log.Info("Finish cleanup database", "lastNumber", atomic.LoadUint64(&c.lastNumber), "receipts", receipts, "txs", txs, "keys", keys, "elapsed", time.Since(t))
 	}()
 
-	for number := lastNumber; number <= cleanPoint; number++ {
-		block := c.blockchain.GetBlockByNumber(number)
-		if block == nil {
-			log.Error("Found bad header", "number", number)
-			return
+	if currentBlock.NumberU64()-c.lastNumber >= 2*c.interval {
+		number := lastNumber + 1
+		for ; number <= currentBlock.NumberU64()-c.interval; number++ {
+			block := c.blockchain.GetBlockByNumber(number)
+			if block == nil {
+				log.Error("Found bad header", "number", number)
+				return
+			}
+
+			rawdb.DeleteReceipts(db, block.Hash(), block.NumberU64())
+
+			batch := c.blockchain.db.NewBatch()
+			for _, tx := range block.Transactions() {
+				txs++
+				rawdb.DeleteTxLookupEntry(batch, tx.Hash())
+			}
+			batch.Write()
+
+			receipts++
+
+			if time.Since(t) >= c.cleanTimeout || c.stopped.IsSet() {
+				atomic.StoreUint64(&c.lastNumber, number)
+				db.Put(lastNumberKey, common.Uint64ToBytes(number))
+				return
+			}
 		}
-
-		rawdb.DeleteReceipts(db, block.Hash(), block.NumberU64())
-
-		batch := c.blockchain.db.NewBatch()
-		for _, tx := range block.Transactions() {
-			rawdb.DeleteTxLookupEntry(batch, tx.Hash())
-		}
-		batch.Write()
-
-		receipts++
-
-		if time.Since(t) >= c.cleanTimeout || c.stopped.IsSet() {
-			atomic.StoreUint64(&c.lastNumber, number)
-			db.Put(lastNumberKey, common.Uint64ToBytes(number))
-			return
-		}
+		atomic.StoreUint64(&c.lastNumber, number-1)
+		db.Put(lastNumberKey, common.Uint64ToBytes(number-1))
 	}
-	atomic.StoreUint64(&c.lastNumber, cleanPoint)
-	db.Put(lastNumberKey, common.Uint64ToBytes(cleanPoint))
+
+	if !c.gcMpt {
+		return
+	}
 
 	filterFn := func(key []byte) {
-		c.filterAdd(key)
+		c.scanFilter.Add(key)
 	}
 
 	for number := cleanPoint + 1; number <= currentBlock.NumberU64(); number++ {
@@ -239,7 +253,7 @@ func (c *Cleaner) cleanup() {
 
 	iterateOver := func(iter ethdb.Iterator, prefix []byte) (bool, error) {
 		for iter.Next() {
-			if !c.filterTest(iter.Key()[len(prefix):]) {
+			if !c.writeFilterTest(iter.Key()[len(prefix):]) && !c.scanFilter.Test(iter.Key()[len(prefix):]) {
 				c.batch.Delete(iter.Key())
 				keys++
 			}
@@ -264,12 +278,14 @@ func (c *Cleaner) cleanup() {
 
 	iter := db.NewIteratorWithPrefix(trie.MerklePrefix)
 	timeout, err := iterateOver(iter, trie.MerklePrefix)
+	iter.Release()
 	if timeout || err != nil {
 		return
 	}
 
 	iter = db.NewIteratorWithPrefix(trie.SecureKeyPrefix)
 	timeout, err = iterateOver(iter, trie.SecureKeyPrefix)
+	iter.Release()
 	if timeout || err != nil {
 		return
 	}
@@ -278,27 +294,32 @@ func (c *Cleaner) cleanup() {
 	}
 }
 
-func (c *Cleaner) filterAdd(key []byte) {
+func (c *Cleaner) writeFilterAdd(key []byte) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	c.filter.Add(key)
+	t := time.Now()
+	c.writeFilter.Add(key)
+	if time.Since(t) >= 100*time.Millisecond {
+		log.Warn("Filter add use too much time", "elapsed", time.Since(t))
+	}
 }
 
-func (c *Cleaner) filterTest(key []byte) bool {
+func (c *Cleaner) writeFilterTest(key []byte) bool {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
-	return c.filter.Test(key)
+	return c.writeFilter.Test(key)
 }
 
-func (c *Cleaner) filterReset() {
+func (c *Cleaner) writeFilterReset() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	c.filter.ClearAll()
+	c.writeFilter.ClearAll()
 }
 
 func ScanStateTrie(root common.Hash, db *trie.Database, onNode keyCallback, onValue keyCallback, onPreImage keyCallback) error {
+	t := time.Now()
 	var accounts int = 0
 	var nodes int = 0
 	var stateTrie *trie.SecureTrie
@@ -331,7 +352,7 @@ func ScanStateTrie(root common.Hash, db *trie.Database, onNode keyCallback, onVa
 	if iter.Error() != nil {
 		return iter.Error()
 	}
-	log.Debug("Scan state tries", "root", root.String(), "nodes", nodes, "accounts", accounts)
+	log.Info("Scan state tries", "root", root.String(), "nodes", nodes, "accounts", accounts, "elapsed", time.Since(t))
 	return nil
 }
 
