@@ -140,24 +140,6 @@ func (c *Cleaner) NeedCleanup() bool {
 	return c.blockchain.CurrentBlock().NumberU64()-lastNumber >= 2*c.interval && !c.cleaning.IsSet()
 }
 
-func (c *Cleaner) OnNode(key []byte) {
-	if c.cleaning.IsSet() {
-		c.writeFilterAdd(key[len(trie.MerklePrefix):])
-	}
-}
-
-func (c *Cleaner) OnPreImage(key []byte) {
-	if c.cleaning.IsSet() {
-		c.writeFilterAdd(key[len(trie.SecureKeyPrefix):])
-	}
-}
-
-func (c *Cleaner) OnWrite() {
-	if c.cleaning.IsSet() {
-		c.batch.WriteAndRest()
-	}
-}
-
 func (c *Cleaner) loop() {
 	defer c.wg.Done()
 
@@ -187,7 +169,6 @@ func (c *Cleaner) cleanup() {
 	if currentBlock.NumberU64()-lastNumber <= cleanDistance {
 		return
 	}
-	cleanPoint := currentBlock.NumberU64() - cleanDistance
 
 	var (
 		receipts = 0
@@ -231,67 +212,6 @@ func (c *Cleaner) cleanup() {
 		db.Put(lastNumberKey, common.Uint64ToBytes(number-1))
 	}
 
-	if !c.gcMpt {
-		return
-	}
-
-	filterFn := func(key []byte) {
-		c.scanFilter.Add(key)
-	}
-
-	for number := cleanPoint + 1; number <= currentBlock.NumberU64(); number++ {
-		block := c.blockchain.GetBlockByNumber(number)
-		if block == nil {
-			log.Error("Found bad block", "number", number)
-			return
-		}
-		if err := ScanStateTrie(block.Root(), c.blockchain.stateCache.TrieDB(), filterFn, filterFn, filterFn); err != nil {
-			log.Error("Failed to scan stat trie", "")
-			return
-		}
-	}
-
-	iterateOver := func(iter ethdb.Iterator, prefix []byte) (bool, error) {
-		for iter.Next() {
-			if !c.writeFilterTest(iter.Key()[len(prefix):]) && !c.scanFilter.Test(iter.Key()[len(prefix):]) {
-				c.batch.Delete(iter.Key())
-				keys++
-			}
-
-			if c.batch.ValueSize() > ethdb.IdealBatchSize {
-				if err := c.batch.WriteAndRest(); err != nil {
-					log.Error("Batch write fail", "err", err)
-					return false, err
-				}
-			}
-
-			if time.Since(t) >= c.cleanTimeout || c.stopped.IsSet() {
-				if c.batch.ValueSize() > 0 {
-					c.batch.WriteAndRest()
-				}
-				log.Debug("Cleanup database timeout", "lastNumber", atomic.LoadUint64(&c.lastNumber), "elapsed", time.Since(t))
-				return true, nil
-			}
-		}
-		return false, nil
-	}
-
-	iter := db.NewIteratorWithPrefix(trie.MerklePrefix)
-	timeout, err := iterateOver(iter, trie.MerklePrefix)
-	iter.Release()
-	if timeout || err != nil {
-		return
-	}
-
-	iter = db.NewIteratorWithPrefix(trie.SecureKeyPrefix)
-	timeout, err = iterateOver(iter, trie.SecureKeyPrefix)
-	iter.Release()
-	if timeout || err != nil {
-		return
-	}
-	if c.batch.ValueSize() > 0 {
-		c.batch.WriteAndRest()
-	}
 }
 
 func (c *Cleaner) writeFilterAdd(key []byte) {

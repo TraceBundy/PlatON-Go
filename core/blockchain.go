@@ -700,7 +700,7 @@ func (bc *BlockChain) Stop() {
 				recent := bc.GetBlockByNumber(number - offset)
 
 				log.Info("Writing cached state to disk", "block", recent.Number(), "hash", recent.Hash(), "root", recent.Root())
-				if err := triedb.Commit(recent.Root(), true, bc.cleaner); err != nil {
+				if err := triedb.Commit(recent.Root(), true, true); err != nil {
 					log.Error("Failed to commit recent state trie", "err", err)
 				}
 			}
@@ -935,10 +935,12 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 
 	// If we're running an archive node, always flush
 	if bc.cacheConfig.Disabled {
-		if err := triedb.Commit(root, false, bc.cleaner); err != nil {
+		triedb.Reference(root, common.Hash{})
+		if err := triedb.Commit(root, false, false); err != nil {
 			log.Error("Commit to triedb error", "root", root)
 			return NonStatTy, err
 		}
+		triedb.DereferenceDB(currentBlock.Root())
 		log.Debug("archive node commit stateDB trie", "blockNumber", block.NumberU64(), "blockHash", block.Hash().Hex(), "root", root.String())
 	} else {
 		log.Debug("non-archive node put stateDB trie", "blockNumber", block.NumberU64(), "blockHash", block.Hash().Hex(), "root", root.String())
@@ -972,7 +974,7 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 						float64(chosen-lastWrite)/(float64)(bc.cacheConfig.TriesInMemory))
 				}
 				// Flush an entire trie and restart the counters
-				triedb.Commit(header.Root, true, bc.cleaner)
+				triedb.Commit(header.Root, true, true)
 				lastWrite = chosen
 				bc.gcproc = 0
 			}

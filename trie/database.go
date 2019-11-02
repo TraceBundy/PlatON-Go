@@ -59,43 +59,6 @@ type DatabaseReader interface {
 	Has(key []byte) (bool, error)
 }
 
-type CommitReader interface {
-	OnNode([]byte)
-	OnPreImage([]byte)
-	OnWrite()
-}
-
-type CommitBatch struct {
-	batch ethdb.Batch
-	cr    CommitReader
-}
-
-func (cb *CommitBatch) Put(key []byte, value []byte) error {
-	if cb.cr != nil {
-		cb.cr.OnNode(key)
-	}
-	return cb.batch.Put(key, value)
-}
-
-func (cb *CommitBatch) Delete(key []byte) error {
-	return cb.batch.Delete(key)
-}
-
-func (cb *CommitBatch) ValueSize() int {
-	return cb.batch.ValueSize()
-}
-
-func (cb *CommitBatch) Write() error {
-	if cb.cr != nil {
-		cb.cr.OnWrite()
-	}
-	return cb.batch.Write()
-}
-
-func (cb *CommitBatch) Reset() {
-	cb.batch.Reset()
-}
-
 // Database is an intermediate write layer between the trie data structures and
 // the disk database. The aim is to accumulate trie writes in-memory and only
 // periodically flush a couple tries to disk, garbage collecting the remainder.
@@ -382,7 +345,7 @@ func (db *Database) node(hash common.Hash, cachegen uint16) node {
 		return node.obj(hash, cachegen)
 	}
 	// Content unavailable in memory, attempt to retrieve from disk
-	enc, err := db.diskdb.Get(append(MerklePrefix, hash[:]...))
+	enc, err := db.diskdb.Get(hash[:])
 	if err != nil || enc == nil {
 		return nil
 	}
@@ -402,7 +365,7 @@ func (db *Database) Node(hash common.Hash) ([]byte, error) {
 		return node.rlp(), nil
 	}
 	// Content unavailable in memory, attempt to retrieve from disk
-	return db.diskdb.Get(append(MerklePrefix, hash[:]...))
+	return db.diskdb.Get(hash[:])
 }
 
 // preimage retrieves a cached trie node pre-image from memory. If it cannot be
@@ -475,6 +438,41 @@ func (db *Database) reference(child common.Hash, parent common.Hash) {
 }
 
 // Dereference removes an existing reference from a root node.
+func (db *Database) DereferenceDB(root common.Hash) {
+	// Sanity check to ensure that the meta-root is not removed
+	if root == (common.Hash{}) {
+		log.Error("Attempted to dereference the trie cache meta root")
+		return
+	}
+	db.lock.Lock()
+	defer db.lock.Unlock()
+
+	nodes, storage, start := len(db.nodes), db.nodesSize, time.Now()
+	batch := db.diskdb.NewBatch()
+	clearFn := func(hash []byte) {
+		batch.Delete(hash)
+		if batch.ValueSize() > ethdb.IdealBatchSize {
+			batch.Write()
+			batch.Reset()
+		}
+	}
+	db.dereference(root, common.Hash{}, clearFn)
+
+	batch.Write()
+
+	db.gcnodes += uint64(nodes - len(db.nodes))
+	db.gcsize += storage - db.nodesSize
+	db.gctime += time.Since(start)
+
+	memcacheGCTimeTimer.Update(time.Since(start))
+	memcacheGCSizeMeter.Mark(int64(storage - db.nodesSize))
+	memcacheGCNodesMeter.Mark(int64(nodes - len(db.nodes)))
+
+	log.Debug("Dereferenced trie from memory database", "nodes", nodes-len(db.nodes), "size", storage-db.nodesSize, "time", time.Since(start),
+		"gcnodes", db.gcnodes, "gcsize", db.gcsize, "gctime", db.gctime, "livenodes", len(db.nodes), "livesize", db.nodesSize)
+}
+
+// Dereference removes an existing reference from a root node.
 func (db *Database) Dereference(root common.Hash) {
 	// Sanity check to ensure that the meta-root is not removed
 	if root == (common.Hash{}) {
@@ -485,7 +483,7 @@ func (db *Database) Dereference(root common.Hash) {
 	defer db.lock.Unlock()
 
 	nodes, storage, start := len(db.nodes), db.nodesSize, time.Now()
-	db.dereference(root, common.Hash{})
+	db.dereference(root, common.Hash{}, nil)
 
 	db.gcnodes += uint64(nodes - len(db.nodes))
 	db.gcsize += storage - db.nodesSize
@@ -500,7 +498,7 @@ func (db *Database) Dereference(root common.Hash) {
 }
 
 // dereference is the private locked version of Dereference.
-func (db *Database) dereference(child common.Hash, parent common.Hash) {
+func (db *Database) dereference(child common.Hash, parent common.Hash, clearFn func([]byte)) {
 	// Dereference the parent-child
 	node := db.nodes[parent]
 
@@ -538,7 +536,7 @@ func (db *Database) dereference(child common.Hash, parent common.Hash) {
 		}
 		// Dereference all children and delete the node
 		for _, hash := range node.childs() {
-			db.dereference(hash, child)
+			db.dereference(hash, child, clearFn)
 		}
 		delete(db.nodes, child)
 		db.nodesSize -= common.StorageSize(common.HashLength + int(node.size))
@@ -650,7 +648,7 @@ func (db *Database) Cap(limit common.StorageSize) error {
 // to disk, forcefully tearing down all references in both directions.
 //
 // As a side effect, all pre-images accumulated up to this point are also written.
-func (db *Database) Commit(node common.Hash, report bool, cr CommitReader) error {
+func (db *Database) Commit(node common.Hash, report bool, uncache bool) error {
 	// Create a database batch to flush persistent data out. It is important that
 	// outside code doesn't see an inconsistent state (referenced data removed from
 	// memory cache during commit but not yet in persistent storage). This is ensured
@@ -658,20 +656,11 @@ func (db *Database) Commit(node common.Hash, report bool, cr CommitReader) error
 	db.lock.RLock()
 
 	start := time.Now()
-	dbBatch := db.diskdb.NewBatch()
-
-	batch := &CommitBatch{
-		batch: dbBatch,
-		cr:    cr,
-	}
+	batch := db.diskdb.NewBatch()
 
 	// Move all of the accumulated preimages into a write batch
 	for hash, preimage := range db.preimages {
-		preHash := db.secureKey(hash[:])
-		if cr != nil {
-			cr.OnPreImage(preHash)
-		}
-		if err := dbBatch.Put(preHash, preimage); err != nil {
+		if err := batch.Put(db.secureKey(hash[:]), preimage); err != nil {
 			log.Error("Failed to commit preimage from trie database", "err", err)
 			db.lock.RUnlock()
 			return err
@@ -705,7 +694,9 @@ func (db *Database) Commit(node common.Hash, report bool, cr CommitReader) error
 	db.preimages = make(map[common.Hash][]byte)
 	db.preimagesSize = 0
 
-	db.uncache(node)
+	if uncache {
+		db.uncache(node)
+	}
 
 	memcacheCommitTimeTimer.Update(time.Since(start))
 	memcacheCommitSizeMeter.Mark(int64(storage - db.nodesSize))
@@ -737,7 +728,7 @@ func (db *Database) commit(hash common.Hash, batch ethdb.Batch) error {
 			return err
 		}
 	}
-	if err := batch.Put(append(MerklePrefix, hash[:]...), node.rlp()); err != nil {
+	if err := batch.Put(hash[:], node.rlp()); err != nil {
 		return err
 	}
 	// If we've reached an optimal batch size, commit and start over
