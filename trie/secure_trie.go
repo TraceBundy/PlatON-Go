@@ -176,7 +176,7 @@ func (t *SecureTrie) Root() []byte {
 // Copy returns a copy of SecureTrie.
 func (t *SecureTrie) Copy() *SecureTrie {
 	cpy := &SecureTrie{
-		trie:             t.trie,
+		trie:             *t.trie.DeepCopyTrie(),
 		secKeyCache:      t.secKeyCache,
 		secKeyCacheOwner: t.secKeyCacheOwner,
 	}

@@ -502,7 +502,7 @@ func (t *Trie) copyNode(n node) {
 	switch n := n.(type) {
 	case *shortNode:
 		if _, ok := n.Val.(valueNode); !ok {
-			if hash, dirty := n.cache(); !dirty {
+			if hash, dirty := n.cache(); hash != nil && !dirty {
 				n.Val = hash
 			} else {
 				switch child := n.Val.(type) {
@@ -520,7 +520,7 @@ func (t *Trie) copyNode(n node) {
 			if n.Children[i] != nil {
 				if _, ok := n.Children[i].(valueNode); !ok {
 
-					if hash, dirty := n.Children[i].cache(); !dirty {
+					if hash, dirty := n.Children[i].cache(); hash != nil && !dirty {
 						n.Children[i] = hash
 					} else {
 						switch child := n.Children[i].(type) {
