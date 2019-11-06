@@ -124,10 +124,11 @@ type Config struct {
 	DatabaseCache      int
 	TrieCache          int
 	TrieTimeout        time.Duration
-	DBDisabledGC bool
-	DBGCInterval uint64
-	DBGCTimeout  time.Duration
-	DBGCMpt bool
+	DBDisabledGC       bool
+	DBGCInterval       uint64
+	DBGCTimeout        time.Duration
+	DBGCMpt            bool
+	DBGCBlock          uint64
 
 	// Mining-related options
 	MinerExtraData []byte `toml:",omitempty"`

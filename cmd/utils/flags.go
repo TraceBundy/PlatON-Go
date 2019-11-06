@@ -613,6 +613,11 @@ var (
 		Name:  "db.gc_mpt",
 		Usage: "Enables database garbage collection MPT",
 	}
+	DBGCBlockFlag = cli.Uint64Flag{
+		Name:  "db.gc_block",
+		Usage: "Number of cache block states, default 10",
+		Value: 10,
+	}
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating
@@ -1195,6 +1200,14 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	}
 	if ctx.GlobalIsSet(DBGCMptFlag.Name) {
 		cfg.DBGCMpt = ctx.GlobalBool(DBGCMptFlag.Name)
+	}
+	if ctx.GlobalIsSet(DBGCBlockFlag.Name) {
+		b := ctx.GlobalUint64(DBGCBlockFlag.Name)
+		if b > 0 {
+			cfg.DBGCBlock = b
+		}
+	} else {
+		cfg.DBGCBlock = DBGCBlockFlag.Value
 	}
 }
 

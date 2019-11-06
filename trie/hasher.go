@@ -103,18 +103,17 @@ func (h *hasher) hash(n node, db *Database, force bool) (node, node, error) {
 	// the dirty flag in commit mode. It's fine to assign these values directly
 	// without copying the node first because hashChildren copies it.
 	cachedHash, _ := hashed.(hashNode)
-	dirty := false
 
 	switch cn := cached.(type) {
 	case *shortNode:
 		cn.flags.hash = cachedHash
 		if db != nil {
-			cn.flags.dirty = &dirty
+			*cn.flags.dirty = false
 		}
 	case *fullNode:
 		cn.flags.hash = cachedHash
 		if db != nil {
-			cn.flags.dirty = &dirty
+			*cn.flags.dirty = false
 		}
 	}
 	return hashed, cached, nil
