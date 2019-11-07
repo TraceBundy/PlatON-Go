@@ -110,8 +110,8 @@ func TestInsertBlob(t *testing.T) {
 	root2, _ := trie2.Commit(leafcallback(triedb2, trie2))
 
 	assert.Equal(t, root1, root2)
-	triedb1.Commit(root1, true)
-	triedb2.Commit(root2, true)
+	triedb1.Commit(root1, true, true)
+	triedb2.Commit(root2, true, true)
 	for k, v := range storages {
 		valueKey1 := trie1.Get([]byte(k))
 		valueKey2 := trie2.Get([]byte(k))
@@ -130,8 +130,8 @@ func TestInsertBlob(t *testing.T) {
 	root2, _ = trie2.Commit(leafcallback(triedb2, trie2))
 
 	assert.Equal(t, root1, root2)
-	triedb1.Commit(root1, true)
-	triedb2.Commit(root2, true)
+	triedb1.Commit(root1, true, true)
+	triedb2.Commit(root2, true, true)
 	for k, v := range storages {
 		valueKey1 := trie1.Get([]byte(k))
 		valueKey2 := trie2.Get([]byte(k))
