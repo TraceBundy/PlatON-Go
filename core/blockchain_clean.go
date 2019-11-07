@@ -16,7 +16,6 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/log"
 	"github.com/PlatONnetwork/PlatON-Go/rlp"
 	"github.com/PlatONnetwork/PlatON-Go/trie"
-	"github.com/willf/bloom"
 )
 
 var (
@@ -76,11 +75,9 @@ type Cleaner struct {
 	scope     event.SubscriptionScope
 	cleanCh   chan *CleanupEvent
 
-	batch       CleanBatch
-	lock        sync.RWMutex
-	scanFilter  *bloom.BloomFilter
-	writeFilter *bloom.BloomFilter
-	blockchain  *BlockChain
+	batch      CleanBatch
+	lock       sync.RWMutex
+	blockchain *BlockChain
 }
 
 func NewCleaner(blockchain *BlockChain, interval uint64, cleanTimeout time.Duration, gcMpt bool) *Cleaner {
@@ -94,9 +91,7 @@ func NewCleaner(blockchain *BlockChain, interval uint64, cleanTimeout time.Durat
 		batch: CleanBatch{
 			batch: blockchain.db.NewBatch(),
 		},
-		scanFilter:  bloom.NewWithEstimates(maxKeyCount, 0.01),
-		writeFilter: bloom.NewWithEstimates(maxKeyCount, 0.01),
-		blockchain:  blockchain,
+		blockchain: blockchain,
 	}
 
 	if c.cleanTimeout < minCleanTimeout {
@@ -155,8 +150,6 @@ func (c *Cleaner) loop() {
 
 func (c *Cleaner) cleanup() {
 	defer c.cleaning.Set(false)
-	defer c.writeFilterReset()
-	defer c.scanFilter.ClearAll()
 
 	db, ok := c.blockchain.db.(*ethdb.LDBDatabase)
 	if !ok {
@@ -212,30 +205,6 @@ func (c *Cleaner) cleanup() {
 		db.Put(lastNumberKey, common.Uint64ToBytes(number-1))
 	}
 
-}
-
-func (c *Cleaner) writeFilterAdd(key []byte) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	t := time.Now()
-	c.writeFilter.Add(key)
-	if time.Since(t) >= 100*time.Millisecond {
-		log.Warn("Filter add use too much time", "elapsed", time.Since(t))
-	}
-}
-
-func (c *Cleaner) writeFilterTest(key []byte) bool {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-
-	return c.writeFilter.Test(key)
-}
-
-func (c *Cleaner) writeFilterReset() {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	c.writeFilter.ClearAll()
 }
 
 func ScanStateTrie(root common.Hash, db *trie.Database, onNode keyCallback, onValue keyCallback, onPreImage keyCallback) error {
