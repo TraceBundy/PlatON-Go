@@ -941,7 +941,7 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 	// If we're running an archive node, always flush
 	if bc.cacheConfig.Disabled {
 		limit := common.StorageSize(bc.cacheConfig.TrieNodeLimit) * 1024 * 1024
-		if !bc.cacheConfig.DBGCMpt {
+		if !bc.cacheConfig.DBGCMpt && !bc.cacheConfig.DBDisabledGC.IsSet() {
 			triedb.Reference(root, common.Hash{})
 			if err := triedb.Commit(root, false, false); err != nil {
 				log.Error("Commit to triedb error", "root", root)
