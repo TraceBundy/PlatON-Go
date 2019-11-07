@@ -616,7 +616,7 @@ var (
 	DBGCBlockFlag = cli.Uint64Flag{
 		Name:  "db.gc_block",
 		Usage: "Number of cache block states, default 10",
-		Value: 10,
+		Value: eth.DefaultConfig.DBGCBlock,
 	}
 )
 
@@ -1206,8 +1206,6 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 		if b > 0 {
 			cfg.DBGCBlock = b
 		}
-	} else {
-		cfg.DBGCBlock = DBGCBlockFlag.Value
 	}
 }
 

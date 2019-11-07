@@ -289,7 +289,7 @@ func (db *Database) DiskDB() DatabaseReader {
 func (db *Database) InsertBlob(hash common.Hash, blob []byte) {
 	db.lock.Lock()
 	defer db.lock.Unlock()
-
+	db.insertFreshNode(hash)
 	db.insert(hash, blob, rawNode(blob))
 }
 
