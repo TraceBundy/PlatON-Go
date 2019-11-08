@@ -924,24 +924,20 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 	localBn := currentBlock.Number()
 	externBn := block.Number()
 
-	start := time.Now()
 	// Irrelevant of the canonical status, write the block itself to the database
 	rawdb.WriteBlock(bc.db, block)
-	writeDuration := time.Since(start)
-	start = time.Now()
 	root, err := state.Commit(true)
 	if err != nil {
 		log.Error("check block is EIP158 error", "hash", block.Hash(), "number", block.NumberU64())
 		return NonStatTy, err
 	}
-	stateCommitDuration := time.Since(start)
 
 	triedb := bc.stateCache.TrieDB()
 
 	// If we're running an archive node, always flush
 	if bc.cacheConfig.Disabled {
 		limit := common.StorageSize(bc.cacheConfig.TrieNodeLimit) * 1024 * 1024
-		if !bc.cacheConfig.DBGCMpt && !bc.cacheConfig.DBDisabledGC.IsSet() {
+		if !(bc.cacheConfig.DBGCMpt && !bc.cacheConfig.DBDisabledGC.IsSet()) {
 			triedb.Reference(root, common.Hash{})
 			if err := triedb.Commit(root, false, false); err != nil {
 				log.Error("Commit to triedb error", "root", root)
@@ -949,19 +945,13 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 			}
 			triedb.Dereference(currentBlock.Root())
 		} else {
-			start = time.Now()
 			triedb.Reference(root, common.Hash{})
-			refDuration := time.Since(start)
-			start = time.Now()
 			if err := triedb.Commit(root, false, false); err != nil {
 				log.Error("Commit to triedb error", "root", root)
 				return NonStatTy, err
 			}
-			triedbCommitDuration := time.Since(start)
-			start = time.Now()
 
 			if block.NumberU64() > bc.cacheConfig.DBGCBlock {
-				log.Debug("log", "number", block.NumberU64(), "dbgc", bc.cacheConfig.DBGCBlock)
 				triedb.DereferenceDB(bc.GetBlockByNumber(block.NumberU64() - bc.cacheConfig.DBGCBlock).Root())
 			}
 			var (
@@ -977,9 +967,6 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 				nodes, _ = triedb.Size()
 				reserve -= 1
 			}
-			derefDuration := time.Since(start)
-
-			log.Debug("write cost", "writeblock", writeDuration, "stateCommitDuration", stateCommitDuration, "refDuration", refDuration, "triedbCommitDuration", triedbCommitDuration, "derefDuration", derefDuration, "nodes", nodes, "limit", limit)
 		}
 		var (
 			nodes, _ = triedb.Size()
