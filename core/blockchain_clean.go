@@ -1,21 +1,16 @@
 package core
 
 import (
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/PlatONnetwork/PlatON-Go/common"
-	"github.com/PlatONnetwork/PlatON-Go/common/hexutil"
 	"github.com/PlatONnetwork/PlatON-Go/core/rawdb"
-	"github.com/PlatONnetwork/PlatON-Go/core/state"
 	"github.com/PlatONnetwork/PlatON-Go/crypto"
 	"github.com/PlatONnetwork/PlatON-Go/ethdb"
 	"github.com/PlatONnetwork/PlatON-Go/event"
 	"github.com/PlatONnetwork/PlatON-Go/log"
-	"github.com/PlatONnetwork/PlatON-Go/rlp"
-	"github.com/PlatONnetwork/PlatON-Go/trie"
 )
 
 var (
@@ -205,70 +200,4 @@ func (c *Cleaner) cleanup() {
 		db.Put(lastNumberKey, common.Uint64ToBytes(number-1))
 	}
 
-}
-
-func ScanStateTrie(root common.Hash, db *trie.Database, onNode keyCallback, onValue keyCallback, onPreImage keyCallback) error {
-	t := time.Now()
-	var accounts int = 0
-	var nodes int = 0
-	var stateTrie *trie.SecureTrie
-	var err error
-	if stateTrie, err = trie.NewSecure(root, db, 0); err != nil {
-		return fmt.Errorf("new secure trie failed :%v", err)
-	}
-	iter := stateTrie.NodeIterator(nil)
-	for iter.Next(true) {
-		nodes++
-		if iter.Hash() != (common.Hash{}) {
-			onNode(iter.Hash().Bytes())
-		}
-		if iter.Leaf() {
-			onPreImage(iter.LeafKey())
-
-			var account state.Account
-			if err := rlp.DecodeBytes(iter.LeafBlob(), &account); err != nil {
-				return fmt.Errorf("parse account failed:%v", err)
-			}
-
-			if account.Root != emptyState {
-				accounts++
-				if err := ScanAccountTrie(account.Root, db, onNode, onValue, onPreImage); err != nil {
-					return fmt.Errorf("scan account trie failed :%v", err)
-				}
-			}
-		}
-	}
-	if iter.Error() != nil {
-		return iter.Error()
-	}
-	log.Info("Scan state tries", "root", root.String(), "nodes", nodes, "accounts", accounts, "elapsed", time.Since(t))
-	return nil
-}
-
-func ScanAccountTrie(root common.Hash, db *trie.Database, onNode keyCallback, onValue keyCallback, onPreImage keyCallback) error {
-	var accountTrie *trie.SecureTrie
-	var err error
-	if accountTrie, err = trie.NewSecure(root, db, 0); err != nil {
-		return err
-	}
-	iter := accountTrie.NodeIterator(nil)
-	for iter.Next(true) {
-		if iter.Hash() != (common.Hash{}) {
-			onNode(iter.Hash().Bytes())
-		}
-		if iter.Leaf() {
-			onPreImage(iter.LeafKey())
-			var valueKey common.Hash
-			var buf []byte
-			if err := rlp.DecodeBytes(iter.LeafBlob(), &buf); err != nil {
-				return fmt.Errorf("decode account leaf %s failed : %v", hexutil.Encode(iter.LeafBlob()), err)
-			}
-			valueKey.SetBytes(buf)
-			onValue(valueKey.Bytes())
-		}
-	}
-	if iter.Error() != nil {
-		return iter.Error()
-	}
-	return nil
 }

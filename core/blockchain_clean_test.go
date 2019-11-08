@@ -2,7 +2,6 @@ package core
 
 import (
 	"crypto/rand"
-	"encoding/binary"
 	"fmt"
 	"io/ioutil"
 	"math/big"
@@ -12,13 +11,9 @@ import (
 
 	"github.com/PlatONnetwork/PlatON-Go/crypto"
 
-	"github.com/PlatONnetwork/PlatON-Go/common"
-	"github.com/PlatONnetwork/PlatON-Go/common/hexutil"
 	"github.com/PlatONnetwork/PlatON-Go/consensus"
 	"github.com/PlatONnetwork/PlatON-Go/core/snapshotdb"
-	"github.com/PlatONnetwork/PlatON-Go/core/state"
 	"github.com/PlatONnetwork/PlatON-Go/ethdb"
-	"github.com/PlatONnetwork/PlatON-Go/trie"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -84,7 +79,7 @@ func TestCleaner(t *testing.T) {
 	cleaner.cleanTimeout = time.Nanosecond
 	cleaner.Cleanup()
 	time.Sleep(100 * time.Millisecond)
-	fmt.Println(cleaner.lastNumber)
+	//fmt.Println(cleaner.lastNumber)
 	assert.True(t, cleaner.lastNumber == 1)
 
 	cleaner.lastNumber = 0
@@ -103,7 +98,7 @@ func TestCleaner(t *testing.T) {
 
 	block := blockchain.GetBlockByNumber(188)
 	_, err = blockchain.StateAt(block.Root())
-	assert.NotNil(t, err)
+	assert.Nil(t, err)
 
 	block = blockchain.GetBlockByNumber(200)
 	statedb, _ := blockchain.StateAt(block.Root())
@@ -133,29 +128,4 @@ func TestStopCleaner(t *testing.T) {
 	time.Sleep(time.Millisecond)
 	cleaner.Stop()
 	assert.True(t, cleaner.stopped.IsSet())
-}
-
-func TestFilter(t *testing.T) {
-	tmpDir, _ := ioutil.TempDir("", "platon")
-	defer os.RemoveAll(tmpDir)
-
-	db, err := ethdb.NewLDBDatabase(tmpDir, 100, 1024)
-	assert.Nil(t, err)
-
-	blockchain, err := newBlockChainForTesting(db)
-	assert.Nil(t, err)
-
-	cleaner := NewCleaner(blockchain, 100, time.Minute, false)
-	cleaner.OnNode([]byte("m-abc"))
-	cleaner.OnPreImage([]byte("secure-key-abcde"))
-
-	assert.False(t, cleaner.writeFilterTest([]byte("abc")))
-	assert.False(t, cleaner.writeFilterTest([]byte("abcde")))
-	assert.False(t, cleaner.writeFilterTest([]byte("123")))
-
-	cleaner.cleaning.Set(true)
-	cleaner.OnNode([]byte("m-abc"))
-	cleaner.OnPreImage([]byte("secure-key-abcde"))
-	assert.True(t, cleaner.writeFilterTest([]byte("abc")))
-	assert.True(t, cleaner.writeFilterTest([]byte("abcde")))
 }
