@@ -17,7 +17,9 @@
 package trie
 
 import (
+	"encoding/binary"
 	"fmt"
+	"github.com/allegro/bigcache"
 	"io"
 	"sync"
 	"time"
@@ -71,6 +73,9 @@ type Database struct {
 
 	preimages map[common.Hash][]byte // Preimages of nodes from the secure trie
 	seckeybuf [secureKeyLength]byte  // Ephemeral buffer for calculating preimage keys
+	cleans    *bigcache.BigCache
+
+	useless []map[string]struct{}
 
 	gctime  time.Duration      // Time spent on garbage collection since last commit
 	gcnodes uint64             // Nodes garbage collected since last commit
@@ -265,6 +270,34 @@ func expandNode(hash hashNode, n node, cachegen uint16) node {
 	}
 }
 
+var (
+	cleans *bigcache.BigCache
+)
+
+func init() {
+	cleans, _ = bigcache.NewBigCache(bigcache.Config{
+		Shards:             1024,
+		LifeWindow:         time.Hour,
+		MaxEntriesInWindow: 1 * 1024,
+		MaxEntrySize:       512,
+		HardMaxCacheSize:   1024,
+		Hasher:             trienodeHasher{},
+	})
+}
+
+// trienodeHasher is a struct to be used with BigCache, which uses a Hasher to
+// determine which shard to place an entry into. It's not a cryptographic hash,
+// just to provide a bit of anti-collision (default is FNV64a).
+//
+// Since trie keys are already hashes, we can just use the key directly to
+// map shard id.
+type trienodeHasher struct{}
+
+// Sum64 implements the bigcache.Hasher interface.
+func (t trienodeHasher) Sum64(key string) uint64 {
+	return binary.BigEndian.Uint64([]byte(key))
+}
+
 // NewDatabase creates a new trie database to store ephemeral trie content before
 // its written out to disk or garbage collected.
 func NewDatabase(diskdb ethdb.Database) *Database {
@@ -273,6 +306,7 @@ func NewDatabase(diskdb ethdb.Database) *Database {
 		freshNodes: make(map[common.Hash]struct{}),
 		nodes:      map[common.Hash]*cachedNode{{}: {}},
 		preimages:  make(map[common.Hash][]byte),
+		cleans:     cleans,
 	}
 }
 
@@ -352,11 +386,15 @@ func (db *Database) node(hash common.Hash, cachegen uint16) node {
 	if node != nil {
 		return node.obj(hash, cachegen)
 	}
+	if enc, err := db.cleans.Get(string(hash.Bytes())); err == nil {
+		return mustDecodeNode(hash[:], enc, cachegen)
+	}
 	// Content unavailable in memory, attempt to retrieve from disk
 	enc, err := db.diskdb.Get(hash[:])
 	if err != nil || enc == nil {
 		return nil
 	}
+	db.cleans.Set(string(hash[:]), enc)
 	return mustDecodeNode(hash[:], enc, cachegen)
 }
 
@@ -372,8 +410,15 @@ func (db *Database) Node(hash common.Hash) ([]byte, error) {
 	if node != nil {
 		return node.rlp(), nil
 	}
+	if enc, err := db.cleans.Get(string(hash.Bytes())); err == nil {
+		return enc, nil
+	}
 	// Content unavailable in memory, attempt to retrieve from disk
-	return db.diskdb.Get(hash[:])
+	enc, err := db.diskdb.Get(hash[:])
+	if err == nil {
+		db.cleans.Set(string(hash[:]), enc)
+	}
+	return enc, err
 }
 
 // preimage retrieves a cached trie node pre-image from memory. If it cannot be
@@ -456,18 +501,14 @@ func (db *Database) DereferenceDB(root common.Hash) {
 	defer db.lock.Unlock()
 
 	nodes, storage, start := len(db.nodes), db.nodesSize, time.Now()
-	batch := db.diskdb.NewBatch()
+	useless := make(map[string]struct{})
 	clearFn := func(hash []byte) {
-		batch.Delete(hash)
-		if batch.ValueSize() > ethdb.IdealBatchSize {
-			batch.Write()
-			batch.Reset()
-		}
+		useless[string(hash)] = struct{}{}
+		//db.cleans.Delete(string(hash))
 	}
 	db.dereference(root, common.Hash{}, clearFn)
 
-	batch.Write()
-
+	db.useless = append(db.useless, useless)
 	db.gcnodes += uint64(nodes - len(db.nodes))
 	db.gcsize += storage - db.nodesSize
 	db.gctime += time.Since(start)
@@ -478,6 +519,47 @@ func (db *Database) DereferenceDB(root common.Hash) {
 
 	log.Debug("Dereferenced trie from memory database", "nodes", nodes-len(db.nodes), "size", storage-db.nodesSize, "time", time.Since(start),
 		"gcnodes", db.gcnodes, "gcsize", db.gcsize, "gctime", db.gctime, "livenodes", len(db.nodes), "livesize", db.nodesSize)
+}
+func (db *Database) uselessTotal() int {
+	sum := 0
+	for _, m := range db.useless {
+		sum += len(m)
+	}
+	return sum
+}
+
+func (db *Database) ResetUseless() {
+	db.useless = nil
+}
+
+func (db *Database) UselessGC(num int) {
+	db.lock.Lock()
+	defer db.lock.Unlock()
+	start := time.Now()
+	total := 0
+	batch := db.diskdb.NewBatch()
+	size := 0
+	for i, m := range db.useless {
+		if total >= num {
+			break
+		}
+		for k, _ := range m {
+			if db.nodes[common.BytesToHash([]byte(k))] == nil {
+				batch.Delete([]byte(k))
+			}
+			if batch.ValueSize() > ethdb.IdealBatchSize {
+				batch.Write()
+				batch.Reset()
+			}
+			size++
+		}
+
+		db.useless[i] = nil
+		total++
+	}
+	db.useless = db.useless[total:]
+	batch.Write()
+	log.Debug("UselessGC clean node", "size", size, "elapse", time.Since(start))
 }
 
 // Dereference removes an existing reference from a root node.
@@ -757,6 +839,8 @@ func (db *Database) Commit(node common.Hash, report bool, uncache bool) error {
 	if !report {
 		logger = log.Debug
 	}
+	stat := db.cleans.Stats()
+	logger("Clean state", "Collisions", stat.Collisions, "DelHits", stat.DelHits, "DelMisses", stat.DelMisses, "Hits", stat.Hits, "Misses", stat.Misses, "Len", db.cleans.Len(), "Cap", db.cleans.Capacity())
 	logger("Persisted trie from memory database", "nodes", nodes-len(db.nodes)+int(db.flushnodes), "size", storage-db.nodesSize+db.flushsize, "time", time.Since(start)+db.flushtime,
 		"gcnodes", db.gcnodes, "gcsize", db.gcsize, "gctime", db.gctime, "livenodes", len(db.nodes), "livesize", db.nodesSize)
 
@@ -783,6 +867,7 @@ func (db *Database) commit(hash common.Hash, batch ethdb.Batch) error {
 	if err := batch.Put(hash[:], node.rlp()); err != nil {
 		return err
 	}
+	db.cleans.Set(string(hash[:]), node.rlp())
 	// If we've reached an optimal batch size, commit and start over
 	if batch.ValueSize() >= ethdb.IdealBatchSize {
 		if err := batch.Write(); err != nil {

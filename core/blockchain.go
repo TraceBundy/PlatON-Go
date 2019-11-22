@@ -953,27 +953,18 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 				return NonStatTy, err
 			}
 
+			triedb.DereferenceDB(currentBlock.Root())
+
 			if block.NumberU64() > bc.cacheConfig.DBGCBlock {
-				triedb.DereferenceDB(bc.GetBlockByNumber(block.NumberU64() - bc.cacheConfig.DBGCBlock).Root())
+				triedb.UselessGC(1)
 			}
-			var (
-				nodes, _ = triedb.Size()
-				reserve  = bc.cacheConfig.DBGCBlock - 1
-			)
-			for nodes > limit && reserve > 0 {
-				bl := bc.GetBlockByNumber(block.NumberU64() - reserve)
-				if bl == nil {
-					break
-				}
-				triedb.DereferenceDB(bl.Root())
-				nodes, _ = triedb.Size()
-				reserve -= 1
-			}
-			oversize = reserve != bc.cacheConfig.DBGCBlock-1
+			nodes, _ := triedb.Size()
+			oversize = nodes > limit
 		}
 
 		if oversize {
 			triedb.CapNode(limit * defaultCapNodePercent)
+			triedb.ResetUseless()
 		}
 		log.Debug("archive node commit stateDB trie", "blockNumber", block.NumberU64(), "blockHash", block.Hash().Hex(), "root", root.String())
 	} else {

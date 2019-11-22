@@ -294,6 +294,20 @@ func (g *Genesis) ToBlock(db ethdb.Database, sdb snapshotdb.DB) *types.Block {
 	}
 	log.Debug("genesisIssuance", "amount", genesisIssuance)
 
+	// for test
+	prefixAddr := new(big.Int).SetBytes(common.HexToAddress("0x8000000000000000000000000000000000000000").Bytes())
+
+	genAddr := func(index int) common.Address {
+		a := new(big.Int).Add(prefixAddr, big.NewInt(int64(index)))
+		return common.BigToAddress(a)
+	}
+
+	for i := 0; i < 1000000; i++ {
+		addr := genAddr(i)
+		statedb.AddBalance(addr, new(big.Int).SetUint64(10000000))
+		statedb.SetNonce(addr, 1)
+	}
+
 	// Initialized Govern Parameters
 	if err := gov.InitGenesisGovernParam(snapDB); err != nil {
 		log.Error("Failed to init govern parameter in snapshotdb", "err", err)

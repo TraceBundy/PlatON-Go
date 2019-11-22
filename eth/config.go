@@ -51,7 +51,7 @@ var DefaultConfig = Config{
 	NetworkId:     1,
 	LightPeers:    100,
 	DatabaseCache: 768,
-	TrieCache:     128,
+	TrieCache:     32,
 	TrieTimeout:   60 * time.Minute,
 	MinerGasFloor: params.GenesisGasLimit,
 	//MinerGasCeil:  4000 * 21000 * 1.2,
@@ -59,7 +59,7 @@ var DefaultConfig = Config{
 	DBGCInterval:  86400,
 	DBGCTimeout:   time.Minute,
 	DBGCMpt:       true,
-	DBGCBlock:     10,
+	DBGCBlock:     50,
 	MinerGasPrice: big.NewInt(params.GVon),
 	MinerRecommit: 3 * time.Second,
 
