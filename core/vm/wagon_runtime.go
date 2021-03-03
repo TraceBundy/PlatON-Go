@@ -2812,42 +2812,6 @@ func Bn256Pairing(proc *exec.Process, x1, y1, x21, y21, x22, y22, len uint32) in
 	return 0
 }
 
-// int bn256_map_g1(byte fe[], size_t len, byte x1[32], byte y1[32]);
-// func $bn256_map_g1(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (result i32)
-func Bn256MapG1(proc *exec.Process, fe, len, x1, y1 uint32) int32 {
-	ctx := proc.HostCtx().(*VMContext)
-	checkGas(ctx, params.Bn256MapG1)
-
-	bigintArray := make([]byte, len)
-	mustReadAt(proc, bigintArray, int64(fe))
-
-	g1 := new(bn256.G1).ScalarBaseMult(new(big.Int).SetBytes(bigintArray))
-
-	res := g1.Marshal()
-
-	mustWriteAt(proc, res[:32], int64(x1))
-	mustWriteAt(proc, res[32:], int64(y1))
-	return 0
-}
-
-// int bn256_map_g2(byte fe[], size_t len, byte x11[32], byte y11[32], byte x12[32], byte y12[32]);
-// func $bn256_map_g2(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (param $4 i32) (param $5 i32) (param $6 i32) (result i32)
-func Bn256MapG2(proc *exec.Process, fe, len, x11, y11, x12, y12 uint32) int32 {
-	ctx := proc.HostCtx().(*VMContext)
-	checkGas(ctx, params.Bn256MapG2)
-
-	bigintArray := make([]byte, len)
-	mustReadAt(proc, bigintArray, int64(fe))
-
-	g2 := new(bn256.G2).ScalarBaseMult(new(big.Int).SetBytes(bigintArray))
-	res := g2.Marshal()
-
-	mustWriteAt(proc, res[:32], int64(x11))
-	mustWriteAt(proc, res[32:64], int64(y11))
-	mustWriteAt(proc, res[64:96], int64(x12))
-	mustWriteAt(proc, res[96:128], int64(y12))
-	return 0
-}
 
 type BinaryOperatorType uint32
 

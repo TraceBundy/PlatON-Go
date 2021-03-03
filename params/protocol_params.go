@@ -171,8 +171,6 @@ const (
 	Bn256G2ScalarMulGas         uint64 = 24000 // Gas needed for an elliptic curve scalar multiplication
 	Bn256PairingCheckBaseGas    uint64 = 45000 // Base price for an elliptic curve pairing check
 	Bn256PairingCheckPerPairGas uint64 = 34000 // Per-point price for an elliptic curve pairing check
-	Bn256MapG1                  uint64 = 600   // Gas price for Bn256 mapping field element to G1 operation
-	Bn256MapG2                  uint64 = 12000 // Gas price for Bn256 mapping field element to G2 operation
 )
 
 var (
