@@ -942,39 +942,6 @@ func NewHostModule() *wasm.Module {
 		},
 	)
 
-	// int bn256_map_g1(byte fe[], size_t len, byte x1[32], byte y1[32]);
-	// func $bn256_map_g1(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (result i32)
-	addFuncExport(m,
-		wasm.FunctionSig{
-			ParamTypes:  []wasm.ValueType{wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32},
-			ReturnTypes: []wasm.ValueType{wasm.ValueTypeI32},
-		},
-		wasm.Function{
-			Host: reflect.ValueOf(Bn256MapG1),
-			Body: &wasm.FunctionBody{},
-		},
-		wasm.ExportEntry{
-			FieldStr: "bn256_map_g1",
-			Kind:     wasm.ExternalFunction,
-		},
-	)
-
-	// int bn256_map_g2(byte fe[], size_t len, byte x11[32], byte y11[32], byte x12[32], byte y12[32]);
-	// func $bn256_map_g2(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (param $4 i32) (param $5 i32) (param $6 i32) (result i32)
-	addFuncExport(m,
-		wasm.FunctionSig{
-			ParamTypes:  []wasm.ValueType{wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32},
-			ReturnTypes: []wasm.ValueType{wasm.ValueTypeI32},
-		},
-		wasm.Function{
-			Host: reflect.ValueOf(Bn256MapG2),
-			Body: &wasm.FunctionBody{},
-		},
-		wasm.ExportEntry{
-			FieldStr: "bn256_map_g2",
-			Kind:     wasm.ExternalFunction,
-		},
-	)
 
 	// uint32_t bigint_binary_operator(const uint8_t *left, uint8_t left_negative, size_t left_arr_size, const uint8_t *right, uint8_t right_negative, size_t right_arr_size, uint8_t *result, size_t result_arr_size, BinaryOperator binary_operator);
 	// func $bigint_binary_operator(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (param $4 i32) (param $5 i32) (param $6 i32) (param $7 i32) (param $8 i32) (result  i32)
