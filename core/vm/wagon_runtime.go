@@ -976,28 +976,28 @@ func NewHostModule() *wasm.Module {
 		},
 	)
 
-	// uint32_t bigint_binary_operators(const uint8_t *left, uint8_t left_negative, const uint8_t *right, uint8_t right_negative, uint8_t *result, size_t arr_size, BinaryOperator operators)
-	// func $bigint_binary_operators(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (param $4 i32) (param $5 i32) (param $6 i32) (result  i32)
+	// uint32_t bigint_binary_operator(const uint8_t *left, uint8_t left_negative, size_t left_arr_size, const uint8_t *right, uint8_t right_negative, size_t right_arr_size, uint8_t *result, size_t result_arr_size, BinaryOperator binary_operator);
+	// func $bigint_binary_operator(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (param $4 i32) (param $5 i32) (param $6 i32) (param $7 i32) (param $8 i32) (result  i32)
 	addFuncExport(m,
 		wasm.FunctionSig{
-			ParamTypes:  []wasm.ValueType{wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32},
+			ParamTypes:  []wasm.ValueType{wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32},
 			ReturnTypes: []wasm.ValueType{wasm.ValueTypeI32},
 		},
 		wasm.Function{
-			Host: reflect.ValueOf(BigintBinaryOperators),
+			Host: reflect.ValueOf(BigintBinaryOperator),
 			Body: &wasm.FunctionBody{},
 		},
 		wasm.ExportEntry{
-			FieldStr: "bigint_binary_operators",
+			FieldStr: "bigint_binary_operator",
 			Kind:     wasm.ExternalFunction,
 		},
 	)
 
-	// uint32_t bigint_exp_mod(const uint8_t *left, uint8_t left_negative, const uint8_t *right, uint8_t right_negative, const uint8_t *mod, uint8_t mod_negative, uint8_t *result, size_t arr_siz);
-	//	func $bigint_exp_mod(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (param $4 i32) (param $5 i32) (param $6 i32) (param $7 i32) (result  i32)
+	// uint32_t bigint_exp_mod(const uint8_t *left, uint8_t left_negative, size_t left_arr_size, const uint8_t *right, uint8_t right_negative, size_t right_arr_size, const uint8_t *mod, uint8_t mod_negative, size_t mod_arr_size, uint8_t *result, size_t result_arr_siz);
+	// func $bigint_exp_mod(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (param $4 i32) (param $5 i32) (param $6 i32) (param $7 i32) (param $8 i32) (param $9 i32) (param $10 i32) (result  i32)
 	addFuncExport(m,
 		wasm.FunctionSig{
-			ParamTypes:  []wasm.ValueType{wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32},
+			ParamTypes:  []wasm.ValueType{wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32},
 			ReturnTypes: []wasm.ValueType{wasm.ValueTypeI32},
 		},
 		wasm.Function{
@@ -1009,11 +1009,12 @@ func NewHostModule() *wasm.Module {
 			Kind:     wasm.ExternalFunction,
 		},
 	)
-	// int32_t bigint_cmp(const uint8_t *left, uint8_t left_negative, const uint8_t *right, uint8_t right_negative, size_t arr_size)
-	// func $bigint_cmp(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (param $4 i32) (result  i32)
+
+	// int32_t bigint_cmp(const uint8_t *left, uint8_t left_negative, size_t left_arr_size, const uint8_t *right, uint8_t right_negative, size_t right_arr_size);
+	// func $bigint_cmp(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (param $4 i32) (param $5 i32) (result  i32)
 	addFuncExport(m,
 		wasm.FunctionSig{
-			ParamTypes:  []wasm.ValueType{wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32},
+			ParamTypes:  []wasm.ValueType{wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32},
 			ReturnTypes: []wasm.ValueType{wasm.ValueTypeI32},
 		},
 		wasm.Function{
@@ -1026,11 +1027,11 @@ func NewHostModule() *wasm.Module {
 		},
 	)
 
-	// uint32_t bigint_sh(const uint8_t *origin, uint8_t origin_negative, uint32_t n, uint8_t *result, size_t arr_size, ShiftDirection direction)
-	// func $bigint_sh(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (param $4 i32) (param $5 i32) (result i32)
+	// uint32_t bigint_sh(const uint8_t *origin, uint8_t origin_negative, size_t origin_arr_size, uint8_t *result, size_t result_arr_size, uint32_t shift_num, ShiftDirection direction);
+	// func $bigint_sh(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (param $4 i32) (param $5 i32) (param $6 i32)  (result i32)
 	addFuncExport(m,
 		wasm.FunctionSig{
-			ParamTypes:  []wasm.ValueType{wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32},
+			ParamTypes:  []wasm.ValueType{wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32},
 			ReturnTypes: []wasm.ValueType{wasm.ValueTypeI32},
 		},
 		wasm.Function{
@@ -1043,19 +1044,19 @@ func NewHostModule() *wasm.Module {
 		},
 	)
 
-	// uint32_t string_literal_operator(const uint8_t *str, size_t str_len, uint8_t *result, size_t arr_size)
-	// func $string_literal_operator(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (result i32)
+	// uint32_t string_convert_operator(const uint8_t *str, size_t str_len, uint8_t *result, size_t result_arr_size);
+	// func $string_convert_operator(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (result i32)
 	addFuncExport(m,
 		wasm.FunctionSig{
 			ParamTypes:  []wasm.ValueType{wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32},
 			ReturnTypes: []wasm.ValueType{wasm.ValueTypeI32},
 		},
 		wasm.Function{
-			Host: reflect.ValueOf(StringLiteralOperator),
+			Host: reflect.ValueOf(StringConvertOperator),
 			Body: &wasm.FunctionBody{},
 		},
 		wasm.ExportEntry{
-			FieldStr: "string_literal_operator",
+			FieldStr: "string_convert_operator",
 			Kind:     wasm.ExternalFunction,
 		},
 	)
@@ -2826,21 +2827,19 @@ const (
 	BIGINTXOR BinaryOperatorType = 0x80
 )
 
-// uint32_t bigint_binary_operators(const uint8_t *left, uint8_t left_negative, const uint8_t *right, uint8_t right_negative, uint8_t *result, size_t arr_size, BinaryOperator operators);
-// func $bigint_binary_operators(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (param $4 i32) (param $5 i32) (param $6 i32) (result  i32)
-func BigintBinaryOperators(proc *exec.Process, left uint32, leftNegative uint32, right uint32, rightNegative uint32,
-	result uint32, arrSize uint32, operators uint32) uint32 {
+// uint32_t bigint_binary_operator(const uint8_t *left, uint8_t left_negative, size_t left_arr_size, const uint8_t *right, uint8_t right_negative, size_t right_arr_size, uint8_t *result, size_t result_arr_size, BinaryOperator binary_operator);
+// func $bigint_binary_operator(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (param $4 i32) (param $5 i32) (param $6 i32) (param $7 i32) (param $8 i32) (result  i32)
+func BigintBinaryOperator(proc *exec.Process, left uint32, leftNegative uint32, leftArrSize uint32, right uint32, rightNegative uint32, rightArrSize uint32,
+	result uint32, resultArrSize uint32, binaryOperator uint32) uint32 {
 	// read left data
-	dataBuf := make([]byte, arrSize)
-	_, leftErr := proc.ReadAt(dataBuf, int64(left))
+	leftDataBuf := make([]byte, leftArrSize)
+	_, leftErr := proc.ReadAt(leftDataBuf, int64(left))
 	if nil != leftErr {
 		panic(leftErr)
 	}
 
-	// fmt.Println("BigintBinaryOperators left: ", dataBuf)
-
 	leftOperand := new(big.Int)
-	leftOperand.SetBytes(dataBuf)
+	leftOperand.SetBytes(leftDataBuf)
 
 	if leftNegative > 0 {
 		bigValueTemp := new(big.Int)
@@ -2849,15 +2848,14 @@ func BigintBinaryOperators(proc *exec.Process, left uint32, leftNegative uint32,
 	}
 
 	// read right data
-	_, rightErr := proc.ReadAt(dataBuf, int64(right))
+	rightDataBuf := make([]byte, rightArrSize)
+	_, rightErr := proc.ReadAt(rightDataBuf, int64(right))
 	if nil != rightErr {
 		panic(rightErr)
 	}
 
-	// fmt.Println("BigintBinaryOperators right: ", dataBuf)
-
 	rightOperand := new(big.Int)
-	rightOperand.SetBytes(dataBuf)
+	rightOperand.SetBytes(rightDataBuf)
 
 	if rightNegative > 0 {
 		bigValueTemp := new(big.Int)
@@ -2867,7 +2865,7 @@ func BigintBinaryOperators(proc *exec.Process, left uint32, leftNegative uint32,
 
 	// binary operation
 	operationResult := new(big.Int)
-	switch BinaryOperatorType(operators) {
+	switch BinaryOperatorType(binaryOperator) {
 	case BIGINTADD:
 		operationResult.Add(leftOperand, rightOperand)
 	case BIGINTSUB:
@@ -2884,30 +2882,29 @@ func BigintBinaryOperators(proc *exec.Process, left uint32, leftNegative uint32,
 		operationResult.Or(leftOperand, rightOperand)
 	case BIGINTXOR:
 		operationResult.Xor(leftOperand, rightOperand)
+	default:
+		panic("invalid parameter")
 	}
-
-	// fmt.Println(operators)
 
 	// write result
 	bytesResult := operationResult.Bytes()
 
-	// fmt.Println("BigintBinaryOperators result: ", bytesResult, operationResult)
-
 	// Clear to zero
-	zeroResult := make([]byte, arrSize)
+	zeroResult := make([]byte, resultArrSize)
 	_, clearErr := proc.WriteAt(zeroResult, int64(result))
 	if nil != clearErr {
 		panic(clearErr)
 	}
 
-	//Set to actual value
-	lenResult := len(bytesResult)
-	if lenResult > int(arrSize) {
-		lenResult = int(arrSize)
+	// Set to actual value
+	bytesRealResult := bytesResult
+	if len(bytesRealResult) > int(resultArrSize) {
+		begin := len(bytesRealResult) - int(resultArrSize)
+		bytesRealResult = bytesResult[begin:]
 	}
-	result = result + arrSize - uint32(lenResult)
+	result = result + resultArrSize - uint32(len(bytesRealResult))
 
-	_, setErr := proc.WriteAt(bytesResult, int64(result))
+	_, setErr := proc.WriteAt(bytesRealResult, int64(result))
 	if nil != setErr {
 		panic(setErr)
 	}
@@ -2915,29 +2912,29 @@ func BigintBinaryOperators(proc *exec.Process, left uint32, leftNegative uint32,
 	var returnResult uint32 = 0
 
 	if -1 == operationResult.Sign() {
-		returnResult = 1
+		returnResult |= 0x01
 	}
 
-	if len(bytesResult) > int(arrSize) {
+	if len(bytesResult) > int(resultArrSize) {
 		returnResult |= 0x02
 	}
 
 	return returnResult
 }
 
-// uint32_t bigint_exp_mod(const uint8_t *left, uint8_t left_negative, const uint8_t *right, uint8_t right_negative, const uint8_t *mod, uint8_t mod_negative, uint8_t *result, size_t arr_siz);
-//	func $bigint_exp_mod(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (param $4 i32) (param $5 i32) (param $6 i32) (param $7 i32) (result  i32)
-func BigintExpMod(proc *exec.Process, left uint32, leftNegative uint32, right uint32, rightNegative uint32, mod uint32, modNegative uint32,
-	result uint32, arrSize uint32) uint32 {
+// uint32_t bigint_exp_mod(const uint8_t *left, uint8_t left_negative, size_t left_arr_size, const uint8_t *right, uint8_t right_negative, size_t right_arr_size, const uint8_t *mod, uint8_t mod_negative, size_t mod_arr_size, uint8_t *result, size_t result_arr_siz);
+// func $bigint_exp_mod(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (param $4 i32) (param $5 i32) (param $6 i32) (param $7 i32) (param $8 i32) (param $9 i32) (param $10 i32) (result  i32)
+func BigintExpMod(proc *exec.Process, left uint32, leftNegative uint32, leftArrSize uint32, right uint32, rightNegative uint32, rightArrSize uint32, mod uint32, modNegative uint32, modArrSize uint32,
+	result uint32, resultArrSize uint32) uint32 {
 	// read left data
-	dataBuf := make([]byte, arrSize)
-	_, leftErr := proc.ReadAt(dataBuf, int64(left))
+	leftDataBuf := make([]byte, leftArrSize)
+	_, leftErr := proc.ReadAt(leftDataBuf, int64(left))
 	if nil != leftErr {
 		panic(leftErr)
 	}
 
 	leftOperand := new(big.Int)
-	leftOperand.SetBytes(dataBuf)
+	leftOperand.SetBytes(leftDataBuf)
 
 	if leftNegative > 0 {
 		bigValueTemp := new(big.Int)
@@ -2946,13 +2943,14 @@ func BigintExpMod(proc *exec.Process, left uint32, leftNegative uint32, right ui
 	}
 
 	// read right data
-	_, rightErr := proc.ReadAt(dataBuf, int64(right))
+	rightDataBuf := make([]byte, rightArrSize)
+	_, rightErr := proc.ReadAt(rightDataBuf, int64(right))
 	if nil != rightErr {
 		panic(rightErr)
 	}
 
 	rightOperand := new(big.Int)
-	rightOperand.SetBytes(dataBuf)
+	rightOperand.SetBytes(rightDataBuf)
 
 	if rightNegative > 0 {
 		bigValueTemp := new(big.Int)
@@ -2961,13 +2959,14 @@ func BigintExpMod(proc *exec.Process, left uint32, leftNegative uint32, right ui
 	}
 
 	// read mod data
-	_, modErr := proc.ReadAt(dataBuf, int64(mod))
+	modDataBuf := make([]byte, modArrSize)
+	_, modErr := proc.ReadAt(modDataBuf, int64(mod))
 	if nil != modErr {
 		panic(modErr)
 	}
 
 	modOperand := new(big.Int)
-	modOperand.SetBytes(dataBuf)
+	modOperand.SetBytes(modDataBuf)
 
 	if modNegative > 0 {
 		bigValueTemp := new(big.Int)
@@ -2979,26 +2978,26 @@ func BigintExpMod(proc *exec.Process, left uint32, leftNegative uint32, right ui
 	operationResult := new(big.Int)
 	operationResult.Exp(leftOperand, rightOperand, modOperand)
 
-	// fmt.Println(leftOperand, rightOperand, modOperand, operationResult)
-
 	// write result
 	bytesResult := operationResult.Bytes()
 
 	// Clear to zero
-	zeroResult := make([]byte, arrSize)
+	zeroResult := make([]byte, resultArrSize)
 	_, clearErr := proc.WriteAt(zeroResult, int64(result))
 	if nil != clearErr {
 		panic(clearErr)
 	}
 
 	//Set to actual value
-	lenResult := len(bytesResult)
-	if lenResult > int(arrSize) {
-		lenResult = int(arrSize)
+	// Set to actual value
+	bytesRealResult := bytesResult
+	if len(bytesRealResult) > int(resultArrSize) {
+		begin := len(bytesRealResult) - int(resultArrSize)
+		bytesRealResult = bytesResult[begin:]
 	}
-	result = result + arrSize - uint32(lenResult)
+	result = result + resultArrSize - uint32(len(bytesRealResult))
 
-	_, setErr := proc.WriteAt(bytesResult, int64(result))
+	_, setErr := proc.WriteAt(bytesRealResult, int64(result))
 	if nil != setErr {
 		panic(setErr)
 	}
@@ -3006,28 +3005,28 @@ func BigintExpMod(proc *exec.Process, left uint32, leftNegative uint32, right ui
 	var returnResult uint32 = 0
 
 	if -1 == operationResult.Sign() {
-		returnResult = 1
+		returnResult |= 0x01
 	}
 
-	if len(bytesResult) > int(arrSize) {
+	if len(bytesResult) > int(resultArrSize) {
 		returnResult |= 0x02
 	}
 
 	return returnResult
 }
 
-// int32_t bigint_cmp(const uint8_t *left, uint8_t left_negative, const uint8_t *right, uint8_t right_negative, size_t arr_size);
-// func $bigint_cmp(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (param $4 i32) (result  i32)
-func BigintCmp(proc *exec.Process, left uint32, leftNegative uint32, right uint32, rightNegative uint32, arrSize uint32) int32 {
+// int32_t bigint_cmp(const uint8_t *left, uint8_t left_negative, size_t left_arr_size, const uint8_t *right, uint8_t right_negative, size_t right_arr_size);
+// func $bigint_cmp(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (param $4 i32) (param $5 i32) (result  i32)
+func BigintCmp(proc *exec.Process, left uint32, leftNegative uint32, leftArrSize uint32, right uint32, rightNegative uint32, rightArrSize uint32) int32 {
 	// read left data
-	dataBuf := make([]byte, arrSize)
-	_, leftErr := proc.ReadAt(dataBuf, int64(left))
+	leftDataBuf := make([]byte, leftArrSize)
+	_, leftErr := proc.ReadAt(leftDataBuf, int64(left))
 	if nil != leftErr {
 		panic(leftErr)
 	}
 
 	leftOperand := new(big.Int)
-	leftOperand.SetBytes(dataBuf)
+	leftOperand.SetBytes(leftDataBuf)
 
 	if leftNegative > 0 {
 		bigValueTemp := new(big.Int)
@@ -3036,13 +3035,14 @@ func BigintCmp(proc *exec.Process, left uint32, leftNegative uint32, right uint3
 	}
 
 	// read right data
-	_, rightErr := proc.ReadAt(dataBuf, int64(right))
+	rightDataBuf := make([]byte, rightArrSize)
+	_, rightErr := proc.ReadAt(rightDataBuf, int64(right))
 	if nil != rightErr {
 		panic(rightErr)
 	}
 
 	rightOperand := new(big.Int)
-	rightOperand.SetBytes(dataBuf)
+	rightOperand.SetBytes(rightDataBuf)
 
 	if rightNegative > 0 {
 		bigValueTemp := new(big.Int)
@@ -3062,18 +3062,18 @@ const (
 	RIGHT ShiftDirectionType = 0x02
 )
 
-// uint32_t bigint_sh(const uint8_t *origin, uint8_t origin_negative, uint32_t n, uint8_t *result, size_t arr_size, ShiftDirection direction)
-// func $bigint_sh(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (param $4 i32) (param $5 i32) (result i32)
-func BigintSh(proc *exec.Process, origin uint32, originNegative uint32, shiftNum uint32, result uint32, arrSize uint32, direction uint32) uint32 {
+// uint32_t bigint_sh(const uint8_t *origin, uint8_t origin_negative, size_t origin_arr_size, uint8_t *result, size_t result_arr_size, uint32_t shift_num, ShiftDirection direction);
+// func $bigint_sh(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (param $4 i32) (param $5 i32) (param $6 i32)  (result i32)
+func BigintSh(proc *exec.Process, origin uint32, originNegative uint32, originArrSize uint32, result uint32, resultArrSize uint32, shiftNum uint32, direction uint32) uint32 {
 	// read origin data
-	dataBuf := make([]byte, arrSize)
-	_, originErr := proc.ReadAt(dataBuf, int64(origin))
+	originDataBuf := make([]byte, originArrSize)
+	_, originErr := proc.ReadAt(originDataBuf, int64(origin))
 	if nil != originErr {
 		panic(originErr)
 	}
 
 	originOperand := new(big.Int)
-	originOperand.SetBytes(dataBuf)
+	originOperand.SetBytes(originDataBuf)
 
 	if originNegative > 0 {
 		bigValueTemp := new(big.Int)
@@ -3094,20 +3094,22 @@ func BigintSh(proc *exec.Process, origin uint32, originNegative uint32, shiftNum
 	bytesResult := operationResult.Bytes()
 
 	// Clear to zero
-	zeroResult := make([]byte, arrSize)
+	zeroResult := make([]byte, resultArrSize)
 	_, clearErr := proc.WriteAt(zeroResult, int64(result))
 	if nil != clearErr {
 		panic(clearErr)
 	}
 
 	//Set to actual value
-	lenResult := len(bytesResult)
-	if lenResult > int(arrSize) {
-		lenResult = int(arrSize)
+	// Set to actual value
+	bytesRealResult := bytesResult
+	if len(bytesRealResult) > int(resultArrSize) {
+		begin := len(bytesRealResult) - int(resultArrSize)
+		bytesRealResult = bytesResult[begin:]
 	}
-	result = result + arrSize - uint32(lenResult)
+	result = result + resultArrSize - uint32(len(bytesRealResult))
 
-	_, setErr := proc.WriteAt(bytesResult, int64(result))
+	_, setErr := proc.WriteAt(bytesRealResult, int64(result))
 	if nil != setErr {
 		panic(setErr)
 	}
@@ -3115,19 +3117,19 @@ func BigintSh(proc *exec.Process, origin uint32, originNegative uint32, shiftNum
 	var returnResult uint32 = 0
 
 	if -1 == operationResult.Sign() {
-		returnResult = 1
+		returnResult |= 0x01
 	}
 
-	if len(bytesResult) > int(arrSize) {
+	if len(bytesResult) > int(resultArrSize) {
 		returnResult |= 0x02
 	}
 
 	return returnResult
 }
 
-// uint32_t string_literal_operator(const uint8_t *str, size_t str_len, uint8_t *result, size_t arr_size)
-// func $string_literal_operator(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (result i32)
-func StringLiteralOperator(proc *exec.Process, str uint32, strLen uint32, result uint32, arrSize uint32) uint32 {
+// uint32_t string_convert_operator(const uint8_t *str, size_t str_len, uint8_t *result, size_t result_arr_size);
+// func $string_convert_operator(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (result i32)
+func StringConvertOperator(proc *exec.Process, str uint32, strLen uint32, result uint32, resultArrSize uint32) uint32 {
 
 	// read string data
 	dataBuf := make([]byte, strLen)
@@ -3144,32 +3146,32 @@ func StringLiteralOperator(proc *exec.Process, str uint32, strLen uint32, result
 	bytesResult := value.Bytes()
 
 	// Clear to zero
-	zeroResult := make([]byte, arrSize)
+	zeroResult := make([]byte, resultArrSize)
 	_, clearErr := proc.WriteAt(zeroResult, int64(result))
 	if nil != clearErr {
 		panic(clearErr)
 	}
 
 	//Set to actual value
-	lenResult := len(bytesResult)
-	if lenResult > int(arrSize) {
-		lenResult = int(arrSize)
+	bytesRealResult := bytesResult
+	if len(bytesRealResult) > int(resultArrSize) {
+		begin := len(bytesRealResult) - int(resultArrSize)
+		bytesRealResult = bytesResult[begin:]
 	}
-	result = result + arrSize - uint32(lenResult)
+	result = result + resultArrSize - uint32(len(bytesRealResult))
 
-	_, setErr := proc.WriteAt(bytesResult, int64(result))
+	_, setErr := proc.WriteAt(bytesRealResult, int64(result))
 	if nil != setErr {
 		panic(setErr)
 	}
 
-	// set return value
 	var returnResult uint32 = 0
 
 	if -1 == value.Sign() {
-		returnResult = 1
+		returnResult |= 0x01
 	}
 
-	if len(bytesResult) > int(arrSize) {
+	if len(bytesResult) > int(resultArrSize) {
 		returnResult |= 0x02
 	}
 
