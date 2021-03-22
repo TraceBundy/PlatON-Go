@@ -2637,9 +2637,9 @@ func Bn256G1Mul(proc *exec.Process, x1, y1, bigint, x2, y2 uint32) int32 {
 	return 0
 }
 
-// int bn256_g2_add(byte x11[32], byte y11[32], byte x12[32], byte y12[32], byte x21[32], byte y21[32], byte x22[32], byte y22[32], byte x31[32], byte y31[32], byte x32[32], byte y32[32]);
+// int bn256_g2_add(byte x11[32], byte x12[32], byte y11[32], byte y12[32], byte x21[32], byte x22[32], byte y21[32], byte y22[32], byte x31[32], byte x32[32], byte y31[32], byte y32[32]);
 // func $bn256_g2_add(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (param $4 i32) (param $5 i32) (result i32)
-func Bn256G2Add(proc *exec.Process, x11, y11, x12, y12, x21, y21, x22, y22, x31, y31, x32, y32 uint32) int32 {
+func Bn256G2Add(proc *exec.Process, x11, x12, y11, y12, x21, x22, y21, y22, x31, x32, y31, y32 uint32) int32 {
 	ctx := proc.HostCtx().(*VMContext)
 	checkGas(ctx, params.Bn256G2AddGas)
 
@@ -2664,10 +2664,10 @@ func Bn256G2Add(proc *exec.Process, x11, y11, x12, y12, x21, y21, x22, y22, x31,
 	mustReadAt(proc, y22Bytes[:], int64(y22))
 
 	var gx1, gx2 bn256.G2
-	if _, err := gx1.Unmarshal(append(x11Bytes[:], append(y11Bytes[:], append(x12Bytes[:], y12Bytes[:]...)...)...)); err != nil {
+	if _, err := gx1.Unmarshal(append(x11Bytes[:], append(x12Bytes[:], append(y11Bytes[:], y12Bytes[:]...)...)...)); err != nil {
 		return -1
 	}
-	if _, err := gx2.Unmarshal(append(x21Bytes[:], append(y21Bytes[:], append(x22Bytes[:], y22Bytes[:]...)...)...)); err != nil {
+	if _, err := gx2.Unmarshal(append(x21Bytes[:], append(x22Bytes[:], append(y21Bytes[:], y22Bytes[:]...)...)...)); err != nil {
 		return -1
 	}
 
@@ -2677,16 +2677,16 @@ func Bn256G2Add(proc *exec.Process, x11, y11, x12, y12, x21, y21, x22, y22, x31,
 	res := gx3.Marshal()
 
 	mustWriteAt(proc, res[:32], int64(x31))
-	mustWriteAt(proc, res[32:64], int64(y31))
-	mustWriteAt(proc, res[64:96], int64(x32))
+	mustWriteAt(proc, res[32:64], int64(x32))
+	mustWriteAt(proc, res[64:96], int64(y31))
 	mustWriteAt(proc, res[96:128], int64(y32))
 
 	return 0
 }
 
-// int bn256_g2_mul(byte x11[32], byte y11[32], byte x12[32], byte y12[32], byte bigint[32] byte x21[32], byte y21[32], byte x22[32], byte y22[32]);
+// int bn256_g2_mul(byte x11[32], byte x12[32], byte y11[32], byte y12[32], byte bigint[32] byte x21[32], byte x22[32], byte y21[32], byte y22[32]);
 // func $bn256_g2_mul(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (param $4 i32) (param $5 i32) (param $6 i32) (param $7 i32) (param $8 i32) (result i32)
-func Bn256G2Mul(proc *exec.Process, x11, y11, x12, y12, bigint, x21, y21, x22, y22 uint32) int32 {
+func Bn256G2Mul(proc *exec.Process, x11, x12, y11, y12, bigint, x21, x22, y21, y22 uint32) int32 {
 	ctx := proc.HostCtx().(*VMContext)
 	checkGas(ctx, params.Bn256G2ScalarMulGas)
 
@@ -2703,7 +2703,7 @@ func Bn256G2Mul(proc *exec.Process, x11, y11, x12, y12, bigint, x21, y21, x22, y
 	mustReadAt(proc, bigintBytes[:], int64(bigint))
 
 	var gx1 bn256.G2
-	if _, err := gx1.Unmarshal(append(x11Bytes[:], append(y11Bytes[:], append(x12Bytes[:], y12Bytes[:]...)...)...)); err != nil {
+	if _, err := gx1.Unmarshal(append(x11Bytes[:], append(x12Bytes[:], append(y11Bytes[:], y12Bytes[:]...)...)...)); err != nil {
 		return -1
 	}
 
@@ -2713,16 +2713,16 @@ func Bn256G2Mul(proc *exec.Process, x11, y11, x12, y12, bigint, x21, y21, x22, y
 	res := gx3.Marshal()
 
 	mustWriteAt(proc, res[:32], int64(x21))
-	mustWriteAt(proc, res[32:64], int64(y21))
-	mustWriteAt(proc, res[64:96], int64(x22))
+	mustWriteAt(proc, res[32:64], int64(x22))
+	mustWriteAt(proc, res[64:96], int64(y21))
 	mustWriteAt(proc, res[96:128], int64(y22))
 
 	return 0
 }
 
-// int bn256_pairing(uint8_t* x1[], uint8_t* y1[], uint8_t* x21[], uint8_t* y21[], uint8_t* x22[], uint8_t* y22[], size_t len);
+// int bn256_pairing(uint8_t* x1[], uint8_t* y1[], uint8_t* x21[], uint8_t* x22[], uint8_t* y21[], uint8_t* y22[], size_t len);
 // func $bn256_pairing(param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (param $4 i32) (param $5 i32) (param $6 i32) (result i32)
-func Bn256Pairing(proc *exec.Process, x1, y1, x21, y21, x22, y22, len uint32) int32 {
+func Bn256Pairing(proc *exec.Process, x1, y1, x21, x22, y21, y22, len uint32) int32 {
 	ctx := proc.HostCtx().(*VMContext)
 	checkGas(ctx, params.Bn256PairingCheckBaseGas+params.Bn256PairingCheckPerPairGas*uint64(len))
 
@@ -2767,7 +2767,7 @@ func Bn256Pairing(proc *exec.Process, x1, y1, x21, y21, x22, y22, len uint32) in
 		g1s = append(g1s, &gx1)
 
 		var gx2 bn256.G2
-		if _, err := gx2.Unmarshal(append(x21Bytes[:], append(y21Bytes[:], append(x22Bytes[:], y22Bytes[:]...)...)...)); err != nil {
+		if _, err := gx2.Unmarshal(append(x21Bytes[:], append(x22Bytes[:], append(y21Bytes[:], y22Bytes[:]...)...)...)); err != nil {
 			return -2
 		}
 		g2s = append(g2s, &gx2)
