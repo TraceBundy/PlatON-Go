@@ -28,7 +28,6 @@ import (
 
 	"github.com/PlatONnetwork/PlatON-Go/common"
 	"github.com/PlatONnetwork/PlatON-Go/common/hexutil"
-	"github.com/PlatONnetwork/PlatON-Go/crypto"
 	"github.com/PlatONnetwork/PlatON-Go/log"
 	"github.com/PlatONnetwork/PlatON-Go/rlp"
 )
@@ -194,13 +193,14 @@ func (tx *Transaction) UnmarshalJSON(input []byte) error {
 	if err := dec.UnmarshalJSON(input); err != nil {
 		return err
 	}
-	var V byte
+	/*var V byte
 	chainID := deriveChainId(dec.V).Uint64()
 	V = byte(dec.V.Uint64() - 35 - 2*chainID)
 
 	if !crypto.ValidateSignatureValues(V, dec.R, dec.S, false) {
 		return ErrInvalidSig
 	}
+	*/
 	*tx = Transaction{
 		data: dec,
 		time: time.Now(),
