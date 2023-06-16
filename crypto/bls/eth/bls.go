@@ -195,6 +195,12 @@ func (s *SchnorrProof) UnmarshalText(text []byte) error {
 func (s SchnorrProof) MarshalText() ([]byte, error) {
 	return []byte(fmt.Sprintf("%x", s.proof.Marshal())), nil
 }
+func (s *SchnorrProof) Serialize() []byte {
+	return s.proof.Marshal()
+}
+func (s *SchnorrProof) Deserialize(buf []byte) error {
+	return s.proof.Unmarshal(buf)
+}
 
 type SchnorrProofHex struct {
 	proof [64]byte

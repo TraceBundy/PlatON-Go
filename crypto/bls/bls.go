@@ -8,6 +8,7 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/crypto/bls/swap"
 	"github.com/PlatONnetwork/PlatON-Go/crypto/bls/types"
 	blsswap "github.com/PlatONnetwork/PlatON-Go/crypto/blsswap"
+	"github.com/PlatONnetwork/PlatON-Go/rlp"
 	"io"
 	"os"
 	"strings"
@@ -22,11 +23,12 @@ const (
 	EthPubKeyHexLength  = EthPubKeyLength * 2
 	SwapPubKeyHexLength = SwapPubKeyLength * 2
 
-	EthSignLength         = 96
-	SwapSignLength        = 48
-	EthSignHexLength      = EthSignLength * 2
-	SwapSignHExLength     = SwapSignLength * 2
-	SchnorrProofHexLength = 128
+	EthSignLength           = 96
+	SwapSignLength          = 48
+	SwapSignConsensusLength = 64
+	EthSignHexLength        = EthSignLength * 2
+	SwapSignHExLength       = SwapSignLength * 2
+	SchnorrProofHexLength   = 128
 )
 
 var (
@@ -161,6 +163,17 @@ type PublicKeyHex struct {
 	pubKey types.IPublicKeyHex
 }
 
+func (p *PublicKeyHex) EncodeRLP(w io.Writer) error {
+	return rlp.Encode(w, p.Bytes())
+}
+
+func (p *PublicKeyHex) DecodeRLP(s *rlp.Stream) error {
+	buf, err := s.Bytes()
+	if err != nil {
+		return err
+	}
+	return p.UnmarshalText([]byte(hex.EncodeToString(buf)))
+}
 func (p *PublicKeyHex) createKeyByText(length int) error {
 	if p.pubKey == nil {
 		switch length {
@@ -204,7 +217,7 @@ func (s *Sign) createKey(length int) error {
 		switch length {
 		case EthSignLength:
 			s.sign = &eth.Sign{}
-		case SwapSignLength:
+		case SwapSignLength, SwapSignConsensusLength:
 			s.sign = &swap.Sign{}
 		default:
 			return errors.New("illegal length")
@@ -264,6 +277,27 @@ func (s *SchnorrProof) UnmarshalText(text []byte) error {
 
 func (s SchnorrProof) MarshalText() ([]byte, error) {
 	return s.proof.MarshalText()
+}
+func (s *SchnorrProof) EncodeRLP(w io.Writer) error {
+	if s.proof != nil {
+		return rlp.Encode(w, s.proof.Serialize())
+	} else if s.text != nil {
+		bytes, err := hex.DecodeString(string(s.text))
+		if err != nil {
+			return err
+		}
+		return rlp.Encode(w, bytes)
+	}
+	return errors.New("empty proof")
+}
+
+func (s *SchnorrProof) DecodeRLP(r *rlp.Stream) error {
+	buf, err := r.Bytes()
+	if err != nil {
+		return err
+	}
+	s.text = []byte(hex.EncodeToString(buf))
+	return nil
 }
 
 type SchnorrProofHex struct {
