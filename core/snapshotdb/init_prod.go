@@ -24,5 +24,5 @@ const (
 	DBPath = "snapshotdb"
 	//DBBasePath path of basedb
 	DBBasePath    = "base"
-	DBArchivePath = "archiveDB"
+	DBArchivePath = "archive"
 )

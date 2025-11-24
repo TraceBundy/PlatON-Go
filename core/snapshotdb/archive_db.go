@@ -46,13 +46,13 @@ type ArchiveBlock struct {
 	KvHash common.Hash
 }
 
-type ArchiveDB struct {
+type archiveDB struct {
 	db     *leveldb.Database
 	triedb *trie.Database
 	trie   *trie.StateTrie
 }
 
-func OpenArchiveDB(path string, cache int, handles int) (*ArchiveDB, error) {
+func OpenArchiveDB(path string, cache int, handles int) (*archiveDB, error) {
 
 	db, err := leveldb.New(getArchiveDBPath(path), cache, handles, "", false)
 	if err != nil {
@@ -62,14 +62,14 @@ func OpenArchiveDB(path string, cache int, handles int) (*ArchiveDB, error) {
 	log.Error("Open archiveDB db succeed", "path", getArchiveDBPath(path))
 
 	triedb := trie.NewDatabase(rawdb.NewDatabase(db))
-	return &ArchiveDB{
+	return &archiveDB{
 		db:     db,
 		triedb: triedb,
 		trie:   nil,
 	}, nil
 }
 
-func (a *ArchiveDB) init(walk func(slice *util.Range, f func(num *big.Int, iter iterator.Iterator) error) error) error {
+func (a *archiveDB) init(walk func(slice *util.Range, f func(num *big.Int, iter iterator.Iterator) error) error) error {
 	num, err := a.CurrentBlock()
 	if err != nil {
 		return err
@@ -106,10 +106,11 @@ func (a *ArchiveDB) init(walk func(slice *util.Range, f func(num *big.Int, iter 
 			return err
 		}
 		a.trie, _ = trie.NewStateTrie(trie.TrieID(block.Root), a.triedb)
+		log.Info("Get archive block", "num", num, "root", block.Root)
 	}
 	return nil
 }
-func (a *ArchiveDB) CommitBlock(block *BlockData) error {
+func (a *archiveDB) CommitBlock(block *BlockData) error {
 	itr := block.data.NewIterator(nil)
 	defer itr.Release()
 	oldRoot := a.trie.Hash()
@@ -151,7 +152,7 @@ func (a *ArchiveDB) CommitBlock(block *BlockData) error {
 	log.Info("Commit archiveDB snapshot", "block", block.Number, "update", total, "treeinsert", insert, "treedelete", deletes)
 	return nil
 }
-func (a *ArchiveDB) CurrentBlock() (*uint64, error) {
+func (a *archiveDB) CurrentBlock() (*uint64, error) {
 	val, _ := a.db.Get(currentBlockKey)
 	if val == nil {
 		return nil, nil
@@ -159,13 +160,13 @@ func (a *ArchiveDB) CurrentBlock() (*uint64, error) {
 	res := binary.BigEndian.Uint64(val)
 	return &res, nil
 }
-func (a *ArchiveDB) SetCurrentBlock(block uint64) error {
+func (a *archiveDB) SetCurrentBlock(block uint64) error {
 	var buf [8]byte
 	binary.BigEndian.PutUint64(buf[:], block)
 	return a.db.Put(currentBlockKey, buf[:])
 }
 
-func (a *ArchiveDB) SetArchiveBlock(batch ethdb.Batch, blockNumber uint64, block *ArchiveBlock) error {
+func (a *archiveDB) SetArchiveBlock(batch ethdb.Batch, blockNumber uint64, block *ArchiveBlock) error {
 	value, err := rlp.EncodeToBytes(block)
 	if err != nil {
 		return err
@@ -173,7 +174,7 @@ func (a *ArchiveDB) SetArchiveBlock(batch ethdb.Batch, blockNumber uint64, block
 	batch.Put(ArchiveBlockKey(blockNumber), value)
 	return nil
 }
-func (a *ArchiveDB) GetArchiveBlock(blockNumber uint64) (*ArchiveBlock, error) {
+func (a *archiveDB) GetArchiveBlock(blockNumber uint64) (*ArchiveBlock, error) {
 	val, err := a.db.Get(ArchiveBlockKey(blockNumber))
 	if err != nil {
 		return nil, err
@@ -186,7 +187,7 @@ func (a *ArchiveDB) GetArchiveBlock(blockNumber uint64) (*ArchiveBlock, error) {
 	return &block, nil
 }
 
-func (a *ArchiveDB) SetVrfNonce(batch ethdb.Batch, blockNumber uint64, nonce *VRFNonce) error {
+func (a *archiveDB) SetVrfNonce(batch ethdb.Batch, blockNumber uint64, nonce *VRFNonce) error {
 	value, err := rlp.EncodeToBytes(nonce)
 	if err != nil {
 		return err
@@ -194,7 +195,7 @@ func (a *ArchiveDB) SetVrfNonce(batch ethdb.Batch, blockNumber uint64, nonce *VR
 	batch.Put(VrfNonceKey(blockNumber), value)
 	return nil
 }
-func (a *ArchiveDB) GetVrfNonce(blockNumber uint64) (*VRFNonce, error) {
+func (a *archiveDB) GetVrfNonce(blockNumber uint64) (*VRFNonce, error) {
 	val, err := a.db.Get(VrfNonceKey(blockNumber))
 	if err != nil {
 		return nil, err
@@ -207,7 +208,7 @@ func (a *ArchiveDB) GetVrfNonce(blockNumber uint64) (*VRFNonce, error) {
 	return &vn, nil
 }
 
-func (a *ArchiveDB) GetVrfNonces(blockNumber uint64) ([][]byte, error) {
+func (a *archiveDB) GetVrfNonces(blockNumber uint64) ([][]byte, error) {
 	vrfNonce, err := a.GetVrfNonce(blockNumber)
 	if err != nil {
 		return nil, err
@@ -224,7 +225,7 @@ func (a *ArchiveDB) GetVrfNonces(blockNumber uint64) ([][]byte, error) {
 	nonces = append(nonces, vrfNonce.Nonce)
 	return nonces, nil
 }
-func (a *ArchiveDB) SnapshotDB(blockNumber uint64) (*ArchiveSnapshot, error) {
+func (a *archiveDB) SnapshotDB(blockNumber uint64) (DB, error) {
 	parentBlockNumber := blockNumber - 1
 	block, err := a.GetArchiveBlock(parentBlockNumber)
 	if err != nil {
@@ -242,7 +243,7 @@ func (a *ArchiveDB) SnapshotDB(blockNumber uint64) (*ArchiveSnapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ArchiveSnapshot{
+	return &archiveSnapshot{
 		trie:        snapTree,
 		blockNumber: blockNumber,
 		kvHash:      block.KvHash,

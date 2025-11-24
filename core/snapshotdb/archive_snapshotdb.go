@@ -11,123 +11,123 @@ import (
 	"math/big"
 )
 
-type ArchiveSnapshot struct {
+type archiveSnapshot struct {
 	trie        *trie.StateTrie
 	blockNumber uint64
 	kvHash      common.Hash
 	vrfNonce    []byte
 }
 
-func (a *ArchiveSnapshot) Put(hash common.Hash, key, value []byte) error {
+func (a *archiveSnapshot) Put(hash common.Hash, key, value []byte) error {
 	a.trie.Update(key, value)
 	return nil
 }
 
-func (a ArchiveSnapshot) NewBlock(blockNumber *big.Int, parentHash common.Hash, hash common.Hash) error {
+func (a archiveSnapshot) NewBlock(blockNumber *big.Int, parentHash common.Hash, hash common.Hash) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (a ArchiveSnapshot) Get(hash common.Hash, key []byte) ([]byte, error) {
+func (a archiveSnapshot) Get(hash common.Hash, key []byte) ([]byte, error) {
 	if bytes.HasPrefix(key, nonceStorageKey) {
 		return a.vrfNonce, nil
 	}
 	return a.trie.Get(key), nil
 }
 
-func (a ArchiveSnapshot) GetFromCommittedBlock(key []byte) ([]byte, error) {
+func (a archiveSnapshot) GetFromCommittedBlock(key []byte) ([]byte, error) {
 	return a.trie.Get(key), nil
 }
 
-func (a ArchiveSnapshot) Del(hash common.Hash, key []byte) error {
+func (a *archiveSnapshot) Del(hash common.Hash, key []byte) error {
 	a.trie.Delete(key)
 	return nil
 }
 
-func (a ArchiveSnapshot) Has(hash common.Hash, key []byte) (bool, error) {
+func (a archiveSnapshot) Has(hash common.Hash, key []byte) (bool, error) {
 	return len(a.trie.Get(key)) != 0, nil
 }
 
-func (a ArchiveSnapshot) Flush(hash common.Hash, blocknumber *big.Int) error {
+func (a archiveSnapshot) Flush(hash common.Hash, blocknumber *big.Int) error {
 	return nil
 }
 
-func (a ArchiveSnapshot) Ranking(hash common.Hash, key []byte, ranges int) iterator.Iterator {
+func (a archiveSnapshot) Ranking(hash common.Hash, key []byte, ranges int) iterator.Iterator {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (a ArchiveSnapshot) WalkBaseDB(slice *util.Range, f func(num *big.Int, iter iterator.Iterator) error) error {
+func (a archiveSnapshot) WalkBaseDB(slice *util.Range, f func(num *big.Int, iter iterator.Iterator) error) error {
 	panic("unsupported")
 }
 
-func (a ArchiveSnapshot) WalkDB(num uint64, f func(baseBlock uint64, iter iterator.Iterator, blocks []rlp.RawValue) error) error {
+func (a archiveSnapshot) WalkDB(num uint64, f func(baseBlock uint64, iter iterator.Iterator, blocks []rlp.RawValue) error) error {
 	panic("unsupported")
 
 }
 
-func (a ArchiveSnapshot) Commit(hash common.Hash) error {
+func (a archiveSnapshot) Commit(hash common.Hash) error {
 	//do nothing
 	return nil
 }
 
-func (a ArchiveSnapshot) Clear() error {
+func (a archiveSnapshot) Clear() error {
 	//do nothing
 	return nil
 }
 
-func (a ArchiveSnapshot) PutBaseDB(key, value []byte) error {
+func (a archiveSnapshot) PutBaseDB(key, value []byte) error {
 	panic("unsupported")
 }
 
-func (a ArchiveSnapshot) GetBaseDB(key []byte) ([]byte, error) {
+func (a archiveSnapshot) GetBaseDB(key []byte) ([]byte, error) {
 	panic("unsupported")
 }
 
-func (a ArchiveSnapshot) DelBaseDB(key []byte) error {
+func (a archiveSnapshot) DelBaseDB(key []byte) error {
 	panic("unsupported")
 }
 
-func (a ArchiveSnapshot) WriteBaseDB(kvs [][2][]byte) error {
+func (a archiveSnapshot) WriteBaseDB(kvs [][2][]byte) error {
 	panic("unsupported")
 }
 
-func (a ArchiveSnapshot) WriteBaseDBWithBlock(current *types.Header, blocks []BlockData) error {
+func (a archiveSnapshot) WriteBaseDBWithBlock(current *types.Header, blocks []BlockData) error {
 	panic("unsupported")
 }
 
-func (a ArchiveSnapshot) SetCurrent(highestHash common.Hash, base, height big.Int) error {
+func (a archiveSnapshot) SetCurrent(highestHash common.Hash, base, height big.Int) error {
 	panic("unsupported")
 }
 
-func (a ArchiveSnapshot) GetCurrent() *current {
+func (a archiveSnapshot) GetCurrent() *current {
 	panic("unsupported")
 }
 
-func (a *ArchiveSnapshot) GetLastKVHash(blockHash common.Hash) []byte {
+func (a *archiveSnapshot) GetLastKVHash(blockHash common.Hash) []byte {
 	return a.kvHash.Bytes()
 }
 
-func (a *ArchiveSnapshot) BaseNum() (*big.Int, error) {
+func (a *archiveSnapshot) BaseNum() (*big.Int, error) {
 	panic("unsupported")
 }
 
-func (a ArchiveSnapshot) Close() error {
+func (a archiveSnapshot) Close() error {
 	return nil
 }
 
-func (a ArchiveSnapshot) Compaction() error {
+func (a archiveSnapshot) Compaction() error {
 	return nil
 }
 
-func (a ArchiveSnapshot) SetEmpty() error {
+func (a archiveSnapshot) SetEmpty() error {
 	panic("unsupported")
 }
 
-func (a ArchiveSnapshot) RevertToSnapshot(hash common.Hash, revid int) {
+func (a archiveSnapshot) RevertToSnapshot(hash common.Hash, revid int) {
 	//do nothind
 }
 
-func (a ArchiveSnapshot) Snapshot(hash common.Hash) int {
+func (a archiveSnapshot) Snapshot(hash common.Hash) int {
 	return 0
 }

@@ -122,9 +122,9 @@ type BaseDB interface {
 }
 
 var (
-	dbpath string
-
-	blockchain Chain
+	dbpath        string
+	enableArchive bool
+	blockchain    Chain
 
 	dbInstance *snapshotDB
 
@@ -144,7 +144,7 @@ var (
 type snapshotDB struct {
 	path          string
 	enableArchive bool
-	archiveDB     *ArchiveDB
+	archiveDB     *archiveDB
 	snapshotLockC int32
 
 	current *current
@@ -174,12 +174,18 @@ type Chain interface {
 	GetHeaderByHash(hash common.Hash) *types.Header
 	GetHeaderByNumber(number uint64) *types.Header
 }
+type ArchiveDB interface {
+	SnapshotDB(blockNumber uint64) (DB, error)
+}
 
 func SetDBPathWithNode(path string) {
 	dbpath = path
 	logger.Info("set path", "path", dbpath)
 }
-
+func SetEnableArchiveWithNode(enable bool) {
+	enableArchive = enable
+	logger.Info("set enable archive", "enable", enable)
+}
 func SetDBBlockChain(c Chain) {
 	blockchain = c
 	logger.Info("set blockchain")
@@ -203,12 +209,18 @@ func Instance() DB {
 		if dbInstance == nil {
 			dbInstance = new(snapshotDB)
 		}
+		dbInstance.enableArchive = enableArchive
 		if err := initDB(dbpath, dbInstance); err != nil {
 			logger.Error("init db fail", "err", err)
 			panic(err)
 		}
 	}
 	return dbInstance
+}
+
+func SnapshotArchiveDB() ArchiveDB {
+	dbInstance := Instance()
+	return dbInstance.(*snapshotDB).archiveDB
 }
 
 func Close() {
@@ -241,15 +253,15 @@ func openBaseDB(snapshotDBPath string, cache int, handles int) (*leveldb.DB, err
 }
 
 func open(path string, cache int, handles int, baseOnly bool, archive bool) (*snapshotDB, error) {
-	logger.Info("open snapshot db Allocated cache and file handles", "cache", cache, "handles", handles, "baseDB", baseOnly)
+	logger.Info("open snapshot db Allocated cache and file handles", "cache", cache, "handles", handles, "baseDB", baseOnly, "archive", archive)
 
 	baseDB, err := openBaseDB(path, cache, handles)
 	if err != nil {
 		return nil, err
 	}
-	var archiveDB *ArchiveDB
+	var archivedb *archiveDB
 	if archive {
-		archiveDB, err = OpenArchiveDB(path, cache, handles)
+		archivedb, err = OpenArchiveDB(path, cache, handles)
 		if err != nil {
 			return nil, err
 		}
@@ -259,7 +271,7 @@ func open(path string, cache int, handles int, baseOnly bool, archive bool) (*sn
 	db := &snapshotDB{
 		path:          path,
 		enableArchive: archive,
-		archiveDB:     archiveDB,
+		archiveDB:     archivedb,
 		unCommit:      unCommitBlock,
 		committed:     make([]*BlockData, 0),
 		baseDB:        baseDB,
@@ -1049,7 +1061,9 @@ func (s *snapshotDB) Close() error {
 	if s.closed {
 		return nil
 	}
-	s.archiveDB.db.Close()
+	if s.archiveDB != nil {
+		s.archiveDB.db.Close()
+	}
 	if s.corn != nil {
 		s.corn.Stop()
 	}

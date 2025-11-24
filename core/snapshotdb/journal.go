@@ -54,8 +54,10 @@ func (s *snapshotDB) loopWriteWal() {
 				s.walSync.Done()
 				continue
 			}
-			if err := s.archiveDB.CommitBlock(block); err != nil {
-				logger.Error("Commit archiveDB block failed", "err", err, "block", block.Number, "hash", block.BlockHash.String())
+			if s.archiveDB != nil {
+				if err := s.archiveDB.CommitBlock(block); err != nil {
+					logger.Error("Commit archiveDB block failed", "err", err, "block", block.Number, "hash", block.BlockHash.String())
+				}
 			}
 			nc := newCurrent(block.Number, nil, block.BlockHash)
 			if err := nc.saveCurrentToBaseDB(CurrentHighestBlock, s.baseDB, false); err != nil {
