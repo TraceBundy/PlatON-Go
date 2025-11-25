@@ -3,6 +3,7 @@ package snapshotdb
 import (
 	"bytes"
 	"encoding/binary"
+
 	"github.com/PlatONnetwork/PlatON-Go/common"
 	"github.com/PlatONnetwork/PlatON-Go/core/rawdb"
 	"github.com/PlatONnetwork/PlatON-Go/ethdb"
@@ -12,8 +13,9 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/trie"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 
-	"github.com/syndtr/goleveldb/leveldb/util"
 	"math/big"
+
+	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
 var (
@@ -37,7 +39,7 @@ func ArchiveBlockKey(number uint64) []byte {
 }
 
 type VRFNonce struct {
-	MaxValidatorNum int
+	MaxValidatorNum uint32
 	Nonce           []byte
 }
 type ArchiveBlock struct {
@@ -100,7 +102,7 @@ func (a *archiveDB) init(walk func(slice *util.Range, f func(num *big.Int, iter 
 			log.Info("Init archiveDB db", "num", num, "root", root)
 			return nil
 		})
-	} else if num != nil {
+	} else {
 		block, err := a.GetArchiveBlock(*num)
 		if err != nil {
 			return err
@@ -122,7 +124,7 @@ func (a *archiveDB) CommitBlock(block *BlockData) error {
 			if err := rlp.DecodeBytes(itr.Value(), &nonces); nil != err {
 				return err
 			}
-			a.SetVrfNonce(batch, block.Number.Uint64(), &VRFNonce{MaxValidatorNum: len(nonces), Nonce: nonces[len(nonces)-1]})
+			a.SetVrfNonce(batch, block.Number.Uint64(), &VRFNonce{MaxValidatorNum: uint32(len(nonces)), Nonce: nonces[len(nonces)-1]})
 		} else {
 			if itr.Value() != nil {
 				a.trie.Update(itr.Key(), itr.Value())
@@ -226,8 +228,7 @@ func (a *archiveDB) GetVrfNonces(blockNumber uint64) ([][]byte, error) {
 	return nonces, nil
 }
 func (a *archiveDB) SnapshotDB(blockNumber uint64) (DB, error) {
-	parentBlockNumber := blockNumber - 1
-	block, err := a.GetArchiveBlock(parentBlockNumber)
+	block, err := a.GetArchiveBlock(blockNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +236,7 @@ func (a *archiveDB) SnapshotDB(blockNumber uint64) (DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	nonces, err := a.GetVrfNonces(parentBlockNumber)
+	nonces, err := a.GetVrfNonces(blockNumber)
 	if err != nil {
 		return nil, err
 	}
