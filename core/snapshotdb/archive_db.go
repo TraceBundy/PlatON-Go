@@ -49,7 +49,7 @@ type ArchiveBlock struct {
 }
 
 type archiveDB struct {
-	db     *leveldb.Database
+	db     ethdb.Database
 	triedb *trie.Database
 	trie   *trie.StateTrie
 }
@@ -64,6 +64,16 @@ func OpenArchiveDB(path string, cache int, handles int) (*archiveDB, error) {
 	log.Error("Open archiveDB db succeed", "path", getArchiveDBPath(path))
 
 	triedb := trie.NewDatabase(rawdb.NewDatabase(db))
+	return &archiveDB{
+		db:     rawdb.NewDatabase(db),
+		triedb: triedb,
+		trie:   nil,
+	}, nil
+}
+
+// NewArchiveDBWithDB creates a new archiveDB instance with the provided database
+func NewArchiveDBWithDB(db ethdb.Database) (*archiveDB, error) {
+	triedb := trie.NewDatabase(db)
 	return &archiveDB{
 		db:     db,
 		triedb: triedb,
