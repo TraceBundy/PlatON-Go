@@ -148,6 +148,7 @@ func (a *archiveDB) CommitBlock(block *BlockData) error {
 	a.triedb.Update(nodes)
 	a.triedb.Commit(root, false, false)
 	batch.Write()
+	a.triedb.IncrVersion()
 	a.triedb.Reference(root, common.Hash{})
 	a.triedb.DereferenceDB(oldRoot)
 	insert, deletes := set.Size()
