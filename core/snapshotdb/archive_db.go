@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-
 	"github.com/PlatONnetwork/PlatON-Go/common"
 	"github.com/PlatONnetwork/PlatON-Go/core/rawdb"
 	"github.com/PlatONnetwork/PlatON-Go/ethdb"
@@ -95,7 +94,7 @@ func (a *archiveDB) init(walk func(slice *util.Range, f func(num *big.Int, iter 
 			for iter.Next() {
 				total += 1
 				size += len(iter.Key()) + len(iter.Value())
-				a.trie.Update(iter.Key(), iter.Value())
+				a.trie.Update(common.CopyBytes(iter.Key()), common.CopyBytes(iter.Value()))
 			}
 			root, set, err := a.trie.Commit(false)
 			if err != nil {
@@ -146,9 +145,9 @@ func (a *archiveDB) CommitBlock(block *BlockData) error {
 			a.SetVrfNonce(batch, block.Number.Uint64(), &VRFNonce{MaxValidatorNum: uint32(len(nonces)), Nonce: nonces[len(nonces)-1]})
 		} else {
 			if itr.Value() != nil {
-				a.trie.Update(itr.Key(), itr.Value())
+				a.trie.Update(common.CopyBytes(itr.Key()), common.CopyBytes(itr.Value()))
 			} else {
-				a.trie.Delete(itr.Key())
+				a.trie.Delete(common.CopyBytes(itr.Key()))
 			}
 		}
 		total++
