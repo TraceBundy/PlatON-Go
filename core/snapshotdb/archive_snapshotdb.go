@@ -36,12 +36,19 @@ func (a archiveSnapshot) Get(hash common.Hash, key []byte) ([]byte, error) {
 	}
 	log.Debug("Get from archive snapshot", "hash", hash, "key", common.Bytes2Hex(key))
 	v, err := a.trie.TryGet(key)
+	if len(v) == 0 && err == nil {
+		return nil, ErrNotFound
+	}
 	log.Debug("Try get from archive snapshot", "key", common.Bytes2Hex(key), "v", common.Bytes2Hex(v), "err", err)
 	return v, err
 }
 
 func (a archiveSnapshot) GetFromCommittedBlock(key []byte) ([]byte, error) {
-	return a.trie.Get(key), nil
+	v, err := a.trie.TryGet(key)
+	if len(v) == 0 && err == nil {
+		return nil, ErrNotFound
+	}
+	return v, err
 }
 
 func (a *archiveSnapshot) Del(hash common.Hash, key []byte) error {
@@ -50,7 +57,11 @@ func (a *archiveSnapshot) Del(hash common.Hash, key []byte) error {
 }
 
 func (a archiveSnapshot) Has(hash common.Hash, key []byte) (bool, error) {
-	return len(a.trie.Get(key)) != 0, nil
+	v, err := a.trie.TryGet(key)
+	if len(v) == 0 && err == nil {
+		return true, ErrNotFound
+	}
+	return len(v) != 0, err
 }
 
 func (a archiveSnapshot) Flush(hash common.Hash, blocknumber *big.Int) error {

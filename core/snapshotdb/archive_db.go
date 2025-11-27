@@ -3,6 +3,7 @@ package snapshotdb
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 
 	"github.com/PlatONnetwork/PlatON-Go/common"
 	"github.com/PlatONnetwork/PlatON-Go/core/rawdb"
@@ -123,6 +124,14 @@ func (a *archiveDB) init(walk func(slice *util.Range, f func(num *big.Int, iter 
 	return nil
 }
 func (a *archiveDB) CommitBlock(block *BlockData) error {
+	currentBlock, err := a.CurrentBlock()
+	if err != nil || currentBlock == nil {
+		panic(fmt.Sprintf("get current failed:%v, block:%v", err, currentBlock))
+	}
+	if *currentBlock+1 < block.Number.Uint64() {
+		panic(fmt.Sprintf("blockdata too far away from current block, current:%d, block:%d", *currentBlock, block.Number.Uint64()))
+	}
+
 	itr := block.data.NewIterator(nil)
 	defer itr.Release()
 	oldRoot := a.trie.Hash()
