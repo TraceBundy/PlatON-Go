@@ -2,6 +2,10 @@ package snapshotdb
 
 import (
 	"bytes"
+	"container/heap"
+	"github.com/PlatONnetwork/PlatON-Go/common/hexutil"
+	"github.com/PlatONnetwork/PlatON-Go/core/rawdb"
+	"github.com/PlatONnetwork/PlatON-Go/ethdb"
 	"math/big"
 
 	"github.com/PlatONnetwork/PlatON-Go/common"
@@ -10,10 +14,90 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/rlp"
 	"github.com/PlatONnetwork/PlatON-Go/trie"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
+	"github.com/syndtr/goleveldb/leveldb/memdb"
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
+// trieKeyValueIterator adapts trie.NodeIterator to iterator.Iterator interface
+// It only returns leaf nodes that match the given prefix
+type trieKeyValueIterator struct {
+	db     ethdb.KeyValueReader
+	nodeIt trie.NodeIterator
+	prefix []byte
+	key    []byte
+	value  []byte
+	valid  bool
+	err    error
+}
+
+func (t *trieKeyValueIterator) First() bool {
+	panic("unsupported")
+}
+
+func (t *trieKeyValueIterator) Last() bool {
+	panic("unsupported")
+}
+
+func (t *trieKeyValueIterator) Seek(key []byte) bool {
+	panic("unsupported")
+
+}
+
+func (t *trieKeyValueIterator) Prev() bool {
+	panic("unsupported")
+}
+
+func (t *trieKeyValueIterator) SetReleaser(releaser util.Releaser) {
+	panic("unsupported")
+}
+
+func (t *trieKeyValueIterator) Valid() bool {
+	panic("unsupported")
+}
+
+func (t *trieKeyValueIterator) Next() bool {
+	for t.nodeIt.Next(true) {
+		if t.nodeIt.Leaf() {
+			key := t.nodeIt.LeafKey()
+			origin := rawdb.ReadPreimage(t.db, common.BytesToHash(key))
+			// Filter by prefix
+			if bytes.HasPrefix(origin, t.prefix) {
+				t.key = origin
+				t.value = t.nodeIt.LeafBlob()
+				t.valid = true
+				return true
+			}
+		}
+	}
+	t.valid = false
+	t.err = t.nodeIt.Error()
+	return false
+}
+
+func (t *trieKeyValueIterator) Key() []byte {
+	if !t.valid {
+		return nil
+	}
+	return t.key
+}
+
+func (t *trieKeyValueIterator) Value() []byte {
+	if !t.valid {
+		return nil
+	}
+	return t.value
+}
+
+func (t *trieKeyValueIterator) Error() error {
+	return t.err
+}
+
+func (t *trieKeyValueIterator) Release() {
+	// NodeIterator doesn't have explicit release method
+}
+
 type archiveSnapshot struct {
+	dbreader    ethdb.KeyValueReader
 	trie        *trie.StateTrie
 	blockNumber uint64
 	kvHash      common.Hash
@@ -69,8 +153,33 @@ func (a archiveSnapshot) Flush(hash common.Hash, blocknumber *big.Int) error {
 }
 
 func (a archiveSnapshot) Ranking(hash common.Hash, key []byte, ranges int) iterator.Iterator {
-	//TODO implement me
-	panic("implement me")
+	log.Debug("archive ranking", "key", hexutil.Encode(key))
+	// Create a trie iterator to traverse all nodes
+	nodeIt := a.trie.NodeIterator(nil)
+
+	// Create ranking heap for sorting and limiting results
+	rankingHeap := newRankingHeap(ranges)
+
+	// Create a custom iterator that converts trie nodes to key-value pairs
+	trieIter := &trieKeyValueIterator{
+		db:     a.dbreader,
+		nodeIt: nodeIt,
+		prefix: key,
+	}
+
+	// Add trie key-value pairs to heap
+	rankingHeap.itr2Heap(trieIter, true, true)
+
+	// Create memdb to store sorted results
+	mdb := memdb.New(DefaultComparer, ranges)
+	for rankingHeap.heap.Len() > 0 {
+		kv := heap.Pop(&rankingHeap.heap).(kv)
+		if err := mdb.Put(kv.key, kv.value); err != nil {
+			return iterator.NewEmptyIterator(err)
+		}
+	}
+
+	return mdb.NewIterator(nil)
 }
 
 func (a archiveSnapshot) WalkBaseDB(slice *util.Range, f func(num *big.Int, iter iterator.Iterator) error) error {

@@ -63,7 +63,7 @@ func OpenArchiveDB(path string, cache int, handles int) (*archiveDB, error) {
 	}
 	log.Error("Open archiveDB db succeed", "path", getArchiveDBPath(path))
 
-	triedb := trie.NewDatabase(rawdb.NewDatabase(db))
+	triedb := trie.NewDatabaseWithConfig(rawdb.NewDatabase(db), &trie.Config{Preimages: true})
 	return &archiveDB{
 		db:     rawdb.NewDatabase(db),
 		triedb: triedb,
@@ -122,6 +122,7 @@ func (a *archiveDB) init(walk func(slice *util.Range, f func(num *big.Int, iter 
 	}
 	return nil
 }
+
 func (a *archiveDB) CommitBlock(block *BlockData) error {
 	currentBlock, err := a.CurrentBlock()
 	if err != nil || currentBlock == nil {
@@ -265,6 +266,7 @@ func (a *archiveDB) SnapshotDB(blockNumber uint64) (DB, error) {
 		return nil, err
 	}
 	return &archiveSnapshot{
+		dbreader:    a.db,
 		trie:        snapTree,
 		blockNumber: blockNumber,
 		kvHash:      block.KvHash,

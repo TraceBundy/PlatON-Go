@@ -305,6 +305,12 @@ func open(path string, cache int, handles int, baseOnly bool, archive bool) (*sn
 		if err := db.archiveDB.init(db.WalkBaseDB); err != nil {
 			return nil, err
 		}
+		for _, blockData := range db.committed {
+			log.Debug("Commit already committed blockdata", "number", blockData.Number)
+			if err := db.archiveDB.CommitBlock(blockData); err != nil {
+				return nil, err
+			}
+		}
 	}
 	logger.Info("Archive snapshotdb init success")
 	return db, nil
