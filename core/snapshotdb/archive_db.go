@@ -19,10 +19,11 @@ import (
 )
 
 var (
-	vrfNoncePrefix     = []byte("vn")
-	archiveBlockPrefix = []byte("abp")
-	currentBlockKey    = []byte("cb")
-	nonceStorageKey    = []byte("nonceStorageKey")
+	defaultCapNodePercent = common.StorageSize(1) / 4
+	vrfNoncePrefix        = []byte("vn")
+	archiveBlockPrefix    = []byte("abp")
+	currentBlockKey       = []byte("cb")
+	nonceStorageKey       = []byte("nonceStorageKey")
 )
 
 func VrfNonceKey(number uint64) []byte {
@@ -58,10 +59,10 @@ func OpenArchiveDB(path string, cache int, handles int) (*archiveDB, error) {
 
 	db, err := leveldb.New(getArchiveDBPath(path), cache, handles, "", false)
 	if err != nil {
-		log.Error("Open archiveDB db failed", "err", err, "path", getArchiveDBPath(path))
+		log.Error("Open archive db failed", "err", err, "path", getArchiveDBPath(path))
 		return nil, err
 	}
-	log.Error("Open archiveDB db succeed", "path", getArchiveDBPath(path))
+	log.Error("Open archive db succeed", "path", getArchiveDBPath(path))
 
 	triedb := trie.NewDatabaseWithConfig(rawdb.NewDatabase(db), &trie.Config{Preimages: true})
 	return &archiveDB{
@@ -109,7 +110,7 @@ func (a *archiveDB) init(walk func(slice *util.Range, f func(num *big.Int, iter 
 			batch := a.db.NewBatch()
 			a.SetArchiveBlock(batch, num.Uint64(), &ArchiveBlock{Number: num.Uint64(), Root: root, KvHash: common.Hash{}})
 			batch.Write()
-			log.Info("Init archiveDB db", "num", num, "root", root)
+			log.Info("Init archive db", "num", num, "root", root)
 			return nil
 		})
 	} else {
@@ -168,12 +169,22 @@ func (a *archiveDB) CommitBlock(block *BlockData) error {
 	a.triedb.Commit(root, false, false)
 	batch.Write()
 	a.triedb.IncrVersion()
-	a.triedb.Reference(root, common.Hash{})
-	a.triedb.DereferenceDB(oldRoot)
+	a.triedb.ReferenceVersion(root)
+	a.triedb.Dereference(oldRoot)
+	
+	size, _ := a.triedb.Size()
+	limit := common.StorageSize(archiveTrieOversizeThreshold) * 1024 * 1024
+	oversize := size > limit
+	if oversize {
+		log.Info("Trie oversize, need to reset", "size", size, "threshold", limit)
+		a.triedb.CapNode(limit * defaultCapNodePercent)
+		a.triedb.ResetUseless()
+	}
 	insert, deletes := set.Size()
-	log.Info("Commit archiveDB snapshot", "block", block.Number, "update", total, "treeinsert", insert, "treedelete", deletes)
+	log.Info("Commit archive snapshot", "block", block.Number, "update", total, "treeinsert", insert, "treedelete", deletes)
 	return nil
 }
+
 func (a *archiveDB) CurrentBlock() (*uint64, error) {
 	val, _ := a.db.Get(currentBlockKey)
 	if val == nil {

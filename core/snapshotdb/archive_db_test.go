@@ -38,10 +38,26 @@ func setupMemoryArchiveDB(t *testing.T) *archiveDB {
 
 	archiveDB, err := NewArchiveDBWithDB(rawDB)
 	if err != nil {
-		t.Fatalf("Failed to create archiveDB with memory DB: %v", err)
+		t.Fatalf("Failed to create archive with memory DB: %v", err)
 	}
 
 	return archiveDB
+}
+func walkFuncInit(slice *util.Range, f func(num *big.Int, iter iterator.Iterator) error) error {
+	// Simulate walking through some data
+	testKV := map[string][]byte{
+		"key1": []byte("value1"),
+		"key2": []byte("value2"),
+	}
+
+	mockIter := newMockIterator(testKV)
+	for mockIter.Next() {
+		err := f(big.NewInt(1), mockIter)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // createTestBlockData creates a test BlockData with sample key-value pairs
@@ -124,7 +140,7 @@ func TestNewArchiveDBWithDB(t *testing.T) {
 	// Test creating archiveDB with provided database
 	archiveDB, err := NewArchiveDBWithDB(rawDB)
 	if err != nil {
-		t.Fatalf("Failed to create archiveDB with memory DB: %v", err)
+		t.Fatalf("Failed to create archive with memory DB: %v", err)
 	}
 
 	// Verify that the database and trie database are initialized
@@ -484,10 +500,8 @@ func TestArchiveDB_CommitBlock(t *testing.T) {
 	archiveDB := setupMemoryArchiveDB(t)
 
 	// Initialize archiveDB first
-	walkFunc := func(slice *util.Range, f func(num *big.Int, iter iterator.Iterator) error) error {
-		return nil
-	}
-	err := archiveDB.init(walkFunc)
+
+	err := archiveDB.init(walkFuncInit)
 	if err != nil {
 		t.Fatalf("Failed to initialize archiveDB: %v", err)
 	}
@@ -538,12 +552,9 @@ func TestArchiveDB_SnapshotDB(t *testing.T) {
 	archiveDB := setupMemoryArchiveDB(t)
 
 	// Initialize archiveDB first
-	walkFunc := func(slice *util.Range, f func(num *big.Int, iter iterator.Iterator) error) error {
-		return nil
-	}
-	err := archiveDB.init(walkFunc)
+	err := archiveDB.init(walkFuncInit)
 	if err != nil {
-		t.Fatalf("Failed to initialize archiveDB: %v", err)
+		t.Fatalf("Failed to initialize archive: %v", err)
 	}
 
 	// Create and commit test block data
@@ -594,7 +605,7 @@ func TestArchiveDB_SnapshotDB_NonExistentBlock(t *testing.T) {
 	}
 	err := archiveDB.init(walkFunc)
 	if err != nil {
-		t.Fatalf("Failed to initialize archiveDB: %v", err)
+		t.Fatalf("Failed to initialize archive: %v", err)
 	}
 
 	// Try to create snapshot for non-existent block

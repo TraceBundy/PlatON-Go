@@ -121,6 +121,7 @@ var (
 		utils.IgnoreLegacyReceiptsFlag,
 		configFileFlag,
 		utils.SnapshotArchiveFlag,
+		utils.SnapshotArchiveTrieOversizeThresholdFlag,
 	}, utils.NetworkFlags, utils.DatabasePathFlags)
 
 	rpcFlags = []cli.Flag{

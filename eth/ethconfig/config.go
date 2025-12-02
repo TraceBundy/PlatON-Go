@@ -101,6 +101,9 @@ var Defaults = Config{
 	TriesInMemory:     128,
 	BlockChainVersion: 3,
 
+	SnapshotArchive:                      false,
+	SnapshotArchiveTrieOversizeThreshold: 64, // 64MB default
+
 	TxPool:        txpool.DefaultConfig,
 	RPCGasCap:     50000000,
 	RPCEVMTimeout: 5 * time.Second,
@@ -183,6 +186,8 @@ type Config struct {
 	DefaultTxsCacheSize      int
 	DefaultBroadcastInterval time.Duration
 	SnapshotArchive          bool
+	// Archive trie options
+	SnapshotArchiveTrieOversizeThreshold uint64 // Threshold size (in bytes) for trie oversize check, default 64MB
 	// Transaction pool options
 	TxPool txpool.Config
 
