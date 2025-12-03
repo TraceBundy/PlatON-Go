@@ -166,12 +166,12 @@ func (a *archiveDB) CommitBlock(block *BlockData) error {
 	a.SetCurrentBlock(block.Number.Uint64())
 	nodes := trie.NewWithNodeSet(set)
 	a.triedb.Update(nodes)
-	a.triedb.Commit(root, false, false)
+	a.triedb.Commit(root, false, true)
 	batch.Write()
 	a.triedb.IncrVersion()
 	a.triedb.ReferenceVersion(root)
 	a.triedb.Dereference(oldRoot)
-	
+
 	size, _ := a.triedb.Size()
 	limit := common.StorageSize(archiveTrieOversizeThreshold) * 1024 * 1024
 	oversize := size > limit
