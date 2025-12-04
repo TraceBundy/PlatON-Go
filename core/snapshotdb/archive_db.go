@@ -11,6 +11,7 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/log"
 	"github.com/PlatONnetwork/PlatON-Go/rlp"
 	"github.com/PlatONnetwork/PlatON-Go/trie"
+	"github.com/VictoriaMetrics/fastcache"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 
 	"math/big"
@@ -20,6 +21,7 @@ import (
 
 var (
 	defaultCapNodePercent = common.StorageSize(1) / 4
+	defaultPreimageCache  = 32
 	vrfNoncePrefix        = []byte("vn")
 	archiveBlockPrefix    = []byte("abp")
 	currentBlockKey       = []byte("cb")
@@ -49,10 +51,36 @@ type ArchiveBlock struct {
 	KvHash common.Hash
 }
 
+type PreimageCache struct {
+	db    ethdb.KeyValueReader
+	cache *fastcache.Cache
+}
+
+func NewPreimageCache(db ethdb.KeyValueReader, mb int) *PreimageCache {
+	return &PreimageCache{
+		db:    db,
+		cache: fastcache.New(mb * 1024 * 1024),
+	}
+}
+
+func (pc *PreimageCache) Get(hash common.Hash) []byte {
+	value := pc.cache.Get(nil, hash.Bytes())
+	if len(value) != 0 {
+		return value
+	}
+	value = rawdb.ReadPreimage(pc.db, hash)
+	if len(value) != 0 {
+		pc.cache.Set(hash.Bytes(), value)
+	}
+	return value
+}
+
 type archiveDB struct {
-	db     ethdb.Database
-	triedb *trie.Database
-	trie   *trie.StateTrie
+	db            ethdb.Database
+	preimageCache *PreimageCache
+	tracedb       *trie.Database
+	triedb        *trie.Database
+	trie          *trie.StateTrie
 }
 
 func OpenArchiveDB(path string, cache int, handles int) (*archiveDB, error) {
@@ -64,11 +92,20 @@ func OpenArchiveDB(path string, cache int, handles int) (*archiveDB, error) {
 	}
 	log.Error("Open archive db succeed", "path", getArchiveDBPath(path))
 
-	triedb := trie.NewDatabaseWithConfig(rawdb.NewDatabase(db), &trie.Config{Preimages: true})
+	triedb := trie.NewDatabaseWithConfig(rawdb.NewDatabase(db), &trie.Config{
+		Cache:     archiveDatabaseCache,
+		Preimages: true,
+	})
+	tracedb := trie.NewDatabaseWithConfig(rawdb.NewDatabase(db), &trie.Config{
+		Cache:     archiveDatabaseCache,
+		Preimages: false,
+	})
 	return &archiveDB{
-		db:     rawdb.NewDatabase(db),
-		triedb: triedb,
-		trie:   nil,
+		db:            rawdb.NewDatabase(db),
+		preimageCache: NewPreimageCache(db, defaultPreimageCache),
+		tracedb:       tracedb,
+		triedb:        triedb,
+		trie:          nil,
 	}, nil
 }
 
@@ -259,12 +296,13 @@ func (a *archiveDB) GetVrfNonces(blockNumber uint64) ([][]byte, error) {
 	return nonces, nil
 }
 func (a *archiveDB) SnapshotDB(blockNumber uint64) (DB, error) {
-	log.Debug("Get archive snapshotdb", "blockNumber", blockNumber)
+	size, _ := a.tracedb.Size()
+	log.Debug("Get archive snapshotdb", "blockNumber", blockNumber, "tracedbSize", size)
 	block, err := a.GetArchiveBlock(blockNumber)
 	if err != nil {
 		return nil, err
 	}
-	snapTree, err := trie.NewStateTrie(trie.TrieID(block.Root), a.triedb)
+	snapTree, err := trie.NewStateTrie(trie.TrieID(block.Root), a.tracedb)
 	if err != nil {
 		return nil, err
 	}
@@ -277,10 +315,11 @@ func (a *archiveDB) SnapshotDB(blockNumber uint64) (DB, error) {
 		return nil, err
 	}
 	return &archiveSnapshot{
-		dbreader:    a.db,
-		trie:        snapTree,
-		blockNumber: blockNumber,
-		kvHash:      block.KvHash,
-		vrfNonce:    vrfNonce,
+		dbreader:      a.db,
+		preimageCache: a.preimageCache,
+		trie:          snapTree,
+		blockNumber:   blockNumber,
+		kvHash:        block.KvHash,
+		vrfNonce:      vrfNonce,
 	}, nil
 }

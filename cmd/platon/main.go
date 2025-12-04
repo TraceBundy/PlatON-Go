@@ -122,6 +122,7 @@ var (
 		configFileFlag,
 		utils.SnapshotArchiveFlag,
 		utils.SnapshotArchiveTrieOversizeThresholdFlag,
+		utils.SnapshotArchiveDatabaseCacheFlag,
 	}, utils.NetworkFlags, utils.DatabasePathFlags)
 
 	rpcFlags = []cli.Flag{

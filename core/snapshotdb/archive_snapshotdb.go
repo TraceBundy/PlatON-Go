@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"container/heap"
 	"github.com/PlatONnetwork/PlatON-Go/common/hexutil"
-	"github.com/PlatONnetwork/PlatON-Go/core/rawdb"
 	"github.com/PlatONnetwork/PlatON-Go/ethdb"
 	"math/big"
+	"sync"
 
 	"github.com/PlatONnetwork/PlatON-Go/common"
 	"github.com/PlatONnetwork/PlatON-Go/core/types"
@@ -18,16 +18,31 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
+var (
+	mdbPool = sync.Pool{
+		New: func() interface{} { return memdb.New(DefaultComparer, 256) },
+	}
+)
+
+func newMdb() *memdb.DB {
+	return mdbPool.Get().(*memdb.DB)
+}
+
+func returnMdbPool(h *memdb.DB) {
+	h.Reset()
+	mdbPool.Put(h)
+}
+
 // trieKeyValueIterator adapts trie.NodeIterator to iterator.Iterator interface
 // It only returns leaf nodes that match the given prefix
 type trieKeyValueIterator struct {
-	db     ethdb.KeyValueReader
-	nodeIt trie.NodeIterator
-	prefix []byte
-	key    []byte
-	value  []byte
-	valid  bool
-	err    error
+	preimageCache *PreimageCache
+	nodeIt        trie.NodeIterator
+	prefix        []byte
+	key           []byte
+	value         []byte
+	valid         bool
+	err           error
 }
 
 func (t *trieKeyValueIterator) First() bool {
@@ -59,7 +74,7 @@ func (t *trieKeyValueIterator) Next() bool {
 	for t.nodeIt.Next(true) {
 		if t.nodeIt.Leaf() {
 			key := t.nodeIt.LeafKey()
-			origin := rawdb.ReadPreimage(t.db, common.BytesToHash(key))
+			origin := t.preimageCache.Get(common.BytesToHash(key))
 			// Filter by prefix
 			if bytes.HasPrefix(origin, t.prefix) {
 				t.key = origin
@@ -93,15 +108,31 @@ func (t *trieKeyValueIterator) Error() error {
 }
 
 func (t *trieKeyValueIterator) Release() {
-	// NodeIterator doesn't have explicit release method
+	t.key = nil
+	t.value = nil
+	t.valid = false
+	t.err = nil
+	t.prefix = nil
+	t.nodeIt = nil
+}
+
+type mdbIterator struct {
+	iterator.Iterator
+	mdb *memdb.DB
+}
+
+func (m *mdbIterator) Release() {
+	m.Iterator.Release()
+	returnMdbPool(m.mdb)
 }
 
 type archiveSnapshot struct {
-	dbreader    ethdb.KeyValueReader
-	trie        *trie.StateTrie
-	blockNumber uint64
-	kvHash      common.Hash
-	vrfNonce    []byte
+	dbreader      ethdb.KeyValueReader
+	preimageCache *PreimageCache
+	trie          *trie.StateTrie
+	blockNumber   uint64
+	kvHash        common.Hash
+	vrfNonce      []byte
 }
 
 func (a *archiveSnapshot) Put(hash common.Hash, key, value []byte) error {
@@ -114,7 +145,7 @@ func (a archiveSnapshot) NewBlock(blockNumber *big.Int, parentHash common.Hash, 
 	panic("implement me")
 }
 
-func (a archiveSnapshot) Get(hash common.Hash, key []byte) ([]byte, error) {
+func (a *archiveSnapshot) Get(hash common.Hash, key []byte) ([]byte, error) {
 	if bytes.HasPrefix(key, nonceStorageKey) {
 		return a.vrfNonce, nil
 	}
@@ -127,7 +158,7 @@ func (a archiveSnapshot) Get(hash common.Hash, key []byte) ([]byte, error) {
 	return v, err
 }
 
-func (a archiveSnapshot) GetFromCommittedBlock(key []byte) ([]byte, error) {
+func (a *archiveSnapshot) GetFromCommittedBlock(key []byte) ([]byte, error) {
 	v, err := a.trie.TryGet(key)
 	if len(v) == 0 && err == nil {
 		return nil, ErrNotFound
@@ -140,7 +171,7 @@ func (a *archiveSnapshot) Del(hash common.Hash, key []byte) error {
 	return nil
 }
 
-func (a archiveSnapshot) Has(hash common.Hash, key []byte) (bool, error) {
+func (a *archiveSnapshot) Has(hash common.Hash, key []byte) (bool, error) {
 	v, err := a.trie.TryGet(key)
 	if len(v) == 0 && err == nil {
 		return true, ErrNotFound
@@ -152,26 +183,26 @@ func (a archiveSnapshot) Flush(hash common.Hash, blocknumber *big.Int) error {
 	return nil
 }
 
-func (a archiveSnapshot) Ranking(hash common.Hash, key []byte, ranges int) iterator.Iterator {
+func (a *archiveSnapshot) Ranking(hash common.Hash, key []byte, ranges int) iterator.Iterator {
 	log.Debug("archive ranking", "key", hexutil.Encode(key))
 	// Create a trie iterator to traverse all nodes
 	nodeIt := a.trie.NodeIterator(nil)
 
 	// Create ranking heap for sorting and limiting results
 	rankingHeap := newRankingHeap(ranges)
-
 	// Create a custom iterator that converts trie nodes to key-value pairs
 	trieIter := &trieKeyValueIterator{
-		db:     a.dbreader,
-		nodeIt: nodeIt,
-		prefix: key,
+		preimageCache: a.preimageCache,
+		nodeIt:        nodeIt,
+		prefix:        key,
 	}
 
 	// Add trie key-value pairs to heap
 	rankingHeap.itr2Heap(trieIter, true, true)
-
+	trieIter.Release()
+	defer rankingHeap.release()
 	// Create memdb to store sorted results
-	mdb := memdb.New(DefaultComparer, ranges)
+	mdb := newMdb()
 	for rankingHeap.heap.Len() > 0 {
 		kv := heap.Pop(&rankingHeap.heap).(kv)
 		if err := mdb.Put(kv.key, kv.value); err != nil {
@@ -179,7 +210,10 @@ func (a archiveSnapshot) Ranking(hash common.Hash, key []byte, ranges int) itera
 		}
 	}
 
-	return mdb.NewIterator(nil)
+	return &mdbIterator{
+		mdb.NewIterator(nil),
+		mdb,
+	}
 }
 
 func (a archiveSnapshot) WalkBaseDB(slice *util.Range, f func(num *big.Int, iter iterator.Iterator) error) error {

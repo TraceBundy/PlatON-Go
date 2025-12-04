@@ -135,8 +135,8 @@ var (
 
 	// Archive trie configuration
 	archiveTrieOversizeThreshold uint64
-
-	logger = log.Root().New("package", "snapshotdb")
+	archiveDatabaseCache         int
+	logger                       = log.Root().New("package", "snapshotdb")
 
 	//ErrNotFound when db not found
 	ErrNotFound = errors.New("snapshotDB: not found")
@@ -207,6 +207,11 @@ func SetDBOptions(cache int, handles int) {
 func SetArchiveTrieOversizeThreshold(threshold uint64) {
 	archiveTrieOversizeThreshold = threshold
 	logger.Info("set archive trie oversize threshold", "threshold", threshold)
+}
+
+func SetArchiveDatabaseCache(cache int) {
+	archiveDatabaseCache = cache
+	logger.Info("set archive database cache", "cache", cache)
 }
 
 // Instance return the Instance of the db
