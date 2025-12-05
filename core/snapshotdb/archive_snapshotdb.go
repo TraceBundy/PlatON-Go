@@ -3,32 +3,31 @@ package snapshotdb
 import (
 	"bytes"
 	"container/heap"
-	"github.com/PlatONnetwork/PlatON-Go/common/hexutil"
-	"github.com/PlatONnetwork/PlatON-Go/ethdb"
-	"math/big"
-	"sync"
-
 	"github.com/PlatONnetwork/PlatON-Go/common"
+	"github.com/PlatONnetwork/PlatON-Go/common/hexutil"
 	"github.com/PlatONnetwork/PlatON-Go/core/types"
+	"github.com/PlatONnetwork/PlatON-Go/ethdb"
 	"github.com/PlatONnetwork/PlatON-Go/log"
 	"github.com/PlatONnetwork/PlatON-Go/rlp"
 	"github.com/PlatONnetwork/PlatON-Go/trie"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 	"github.com/syndtr/goleveldb/leveldb/memdb"
 	"github.com/syndtr/goleveldb/leveldb/util"
+	"math/big"
+	"sync"
 )
 
 var (
 	mdbPool = sync.Pool{
-		New: func() interface{} { return memdb.New(DefaultComparer, 256) },
+		New: func() interface{} { return NewMemDB(memdb.New(DefaultComparer, 256)) },
 	}
 )
 
-func newMdb() *memdb.DB {
-	return mdbPool.Get().(*memdb.DB)
+func newMdb() *MemDB {
+	return mdbPool.Get().(*MemDB)
 }
 
-func returnMdbPool(h *memdb.DB) {
+func returnMdbPool(h *MemDB) {
 	h.Reset()
 	mdbPool.Put(h)
 }
@@ -118,17 +117,18 @@ func (t *trieKeyValueIterator) Release() {
 
 type mdbIterator struct {
 	iterator.Iterator
-	mdb *memdb.DB
+	mdb *MemDB
 }
 
 func (m *mdbIterator) Release() {
 	m.Iterator.Release()
-	returnMdbPool(m.mdb)
+	m.mdb.Release()
 }
 
 type archiveSnapshot struct {
 	dbreader      ethdb.KeyValueReader
 	preimageCache *PreimageCache
+	rankingCache  *RankingCache
 	trie          *trie.StateTrie
 	blockNumber   uint64
 	kvHash        common.Hash
@@ -184,6 +184,14 @@ func (a archiveSnapshot) Flush(hash common.Hash, blocknumber *big.Int) error {
 }
 
 func (a *archiveSnapshot) Ranking(hash common.Hash, key []byte, ranges int) iterator.Iterator {
+	rangingKey := RankingCacheKey(a.trie.Hash(), key, ranges)
+	if db := a.rankingCache.Get(rangingKey); db != nil {
+		return &mdbIterator{
+			db.NewIterator(nil),
+			db,
+		}
+	}
+
 	log.Debug("archive ranking", "key", hexutil.Encode(key))
 	// Create a trie iterator to traverse all nodes
 	nodeIt := a.trie.NodeIterator(nil)
@@ -198,7 +206,7 @@ func (a *archiveSnapshot) Ranking(hash common.Hash, key []byte, ranges int) iter
 	}
 
 	// Add trie key-value pairs to heap
-	rankingHeap.itr2Heap(trieIter, true, true)
+	rankingHeap.itr2Heap(trieIter, true, false)
 	trieIter.Release()
 	defer rankingHeap.release()
 	// Create memdb to store sorted results
@@ -206,10 +214,13 @@ func (a *archiveSnapshot) Ranking(hash common.Hash, key []byte, ranges int) iter
 	for rankingHeap.heap.Len() > 0 {
 		kv := heap.Pop(&rankingHeap.heap).(kv)
 		if err := mdb.Put(kv.key, kv.value); err != nil {
+			returnMdbPool(mdb)
 			return iterator.NewEmptyIterator(err)
 		}
 	}
 
+	a.rankingCache.Add(rangingKey, mdb)
+	mdb.Ref()
 	return &mdbIterator{
 		mdb.NewIterator(nil),
 		mdb,

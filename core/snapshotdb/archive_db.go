@@ -12,9 +12,12 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/rlp"
 	"github.com/PlatONnetwork/PlatON-Go/trie"
 	"github.com/VictoriaMetrics/fastcache"
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
-
+	"github.com/syndtr/goleveldb/leveldb/memdb"
+	"github.com/syndtr/goleveldb/leveldb/opt"
 	"math/big"
+	"sync"
 
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
@@ -22,12 +25,18 @@ import (
 var (
 	defaultCapNodePercent = common.StorageSize(1) / 4
 	defaultPreimageCache  = 32
+	defaultRankingCache   = 8
 	vrfNoncePrefix        = []byte("vn")
 	archiveBlockPrefix    = []byte("abp")
 	currentBlockKey       = []byte("cb")
 	nonceStorageKey       = []byte("nonceStorageKey")
 )
 
+func RankingCacheKey(root common.Hash, key []byte, ranges int) []byte {
+	var buf [4]byte
+	binary.BigEndian.PutUint32(buf[:], uint32(ranges))
+	return append(append(root.Bytes(), key[:]...), buf[:]...)
+}
 func VrfNonceKey(number uint64) []byte {
 	var buf [10]byte
 	copy(buf[:], vrfNoncePrefix)
@@ -75,9 +84,75 @@ func (pc *PreimageCache) Get(hash common.Hash) []byte {
 	return value
 }
 
+type MemDB struct {
+	sync.Mutex
+	*memdb.DB
+	ref int
+}
+
+func NewMemDB(db *memdb.DB) *MemDB {
+	return &MemDB{
+		DB: db,
+	}
+}
+
+func (m *MemDB) Ref() {
+	m.Lock()
+	defer m.Unlock()
+	m.ref++
+}
+
+func (m *MemDB) Deref() {
+	m.Lock()
+	defer m.Unlock()
+	m.ref--
+}
+
+func (m *MemDB) Release() {
+	m.Lock()
+	defer m.Unlock()
+	m.ref--
+	if m.ref == 0 {
+		returnMdbPool(m)
+	}
+}
+
+type RankingCache struct {
+	sync.Mutex
+	rankingCache *lru.Cache
+}
+
+func NewRankingCache(num int) *RankingCache {
+	cache, _ := lru.NewWithEvict(num, func(key, value interface{}) {
+		value.(*MemDB).Release()
+	})
+	return &RankingCache{rankingCache: cache}
+}
+
+func (rc *RankingCache) Add(key []byte, db *MemDB) {
+	rc.Lock()
+	defer rc.Unlock()
+	db.Ref()
+	rc.rankingCache.Add(string(key), db)
+}
+
+func (rc *RankingCache) Get(key []byte) *MemDB {
+	rc.Lock()
+	defer rc.Unlock()
+	v, ok := rc.rankingCache.Get(string(key))
+	if ok {
+		db := v.(*MemDB)
+		db.Ref()
+		log.Debug("RankingCache hit", "key", string(key))
+		return db
+	}
+	return nil
+}
+
 type archiveDB struct {
 	db            ethdb.Database
 	preimageCache *PreimageCache
+	rankingCache  *RankingCache
 	tracedb       *trie.Database
 	triedb        *trie.Database
 	trie          *trie.StateTrie
@@ -92,17 +167,25 @@ func OpenArchiveDB(path string, cache int, handles int) (*archiveDB, error) {
 	}
 	log.Error("Open archive db succeed", "path", getArchiveDBPath(path))
 
+	// Set read options to not fill cache for tracedb operations
+	db.SetReadOptions(&opt.ReadOptions{
+		DontFillCache: true,
+	})
+
 	triedb := trie.NewDatabaseWithConfig(rawdb.NewDatabase(db), &trie.Config{
 		Cache:     archiveDatabaseCache,
 		Preimages: true,
 	})
+
 	tracedb := trie.NewDatabaseWithConfig(rawdb.NewDatabase(db), &trie.Config{
 		Cache:     archiveDatabaseCache,
 		Preimages: false,
 	})
+
 	return &archiveDB{
 		db:            rawdb.NewDatabase(db),
 		preimageCache: NewPreimageCache(db, defaultPreimageCache),
+		rankingCache:  NewRankingCache(defaultRankingCache),
 		tracedb:       tracedb,
 		triedb:        triedb,
 		trie:          nil,
@@ -317,6 +400,7 @@ func (a *archiveDB) SnapshotDB(blockNumber uint64) (DB, error) {
 	return &archiveSnapshot{
 		dbreader:      a.db,
 		preimageCache: a.preimageCache,
+		rankingCache:  a.rankingCache,
 		trie:          snapTree,
 		blockNumber:   blockNumber,
 		kvHash:        block.KvHash,
